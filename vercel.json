@@ -1,32 +1,14 @@
 {
-  "rewrites": [
+  "services": [
     {
-      "source": "/api/(.*)",
-      "destination": "/api/index.py"
+      "name": "frontend",
+      "directory": "frontend",
+      "type": "nextjs"
     },
     {
-      "source": "/api/backend(/.*)?",
-      "destination": {
-        "type": "service",
-        "service": "backend"
-      }
-    },
-    {
-      "source": "/(.*)",
-      "destination": {
-        "type": "service",
-        "service": "frontend"
-      }
+      "name": "backend",
+      "directory": "api",
+      "type": "python"
     }
-  ],
-  "services": {
-    "frontend": {
-      "root": "frontend",
-      "framework": "nextjs"
-    },
-    "backend": {
-      "root": "backend",
-      "entrypoint": "main:app"
-    }
-  }
+  ]
 }
