@@ -2,7 +2,7 @@ import os
 import sys
 sys.path.insert(0, os.path.dirname(__file__))
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(title="Forex POC API")
@@ -20,32 +20,21 @@ def health():
     return {"status": "ok", "version": "2.0.0"}
 
 @app.post("/api/quick-register")
-def quick_register(data: dict):
-    import hashlib, secrets
-    from database import get_db
-    username = data.get("username", "demo")
-    password = data.get("password", "demo123")
-    db = get_db()
+async def quick_register(request: Request):
     try:
-        salt = secrets.token_hex(16)
-        pwd = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 100000).hex()
-        hashed = f"{salt}${pwd}"
-        db.execute("INSERT OR IGNORE INTO users (username, hashed_password) VALUES (?,?)", (username, hashed))
+        data = await request.json()
+        username = data.get("username", "demo")
+        password = data.get("password", "demo123")
+        from database import get_db
+        db = get_db()
+        db.execute("INSERT OR IGNORE INTO users (username, hashed_password) VALUES (?,?)", (username, "test_hash"))
         db.commit()
         user = db.execute("SELECT id, username FROM users WHERE username=?", (username,)).fetchone()
-        if not user:
-            user = {"id": 1, "username": username}
-        from datetime import datetime, timedelta
-        from jose import jwt
-        token = jwt.encode(
-            {"sub": username, "user_id": user["id"], "exp": datetime.utcnow() + timedelta(days=1)},
-            "forex-poc-demo-secret-2024", algorithm="HS256"
-        )
-        return {"access_token": token, "token_type": "bearer", "user": {"id": user["id"], "username": username}}
-    except Exception as e:
-        return {"error": str(e)}
-    finally:
         db.close()
+        return {"access_token": "dummy-token", "token_type": "bearer", "user": {"id": user["id"] if user else 1, "username": username}}
+    except Exception as e:
+        import traceback
+        return {"error": str(e), "trace": traceback.format_exc().split("\n")[-5:]}
 
 # Now import and register all routes
 try:
