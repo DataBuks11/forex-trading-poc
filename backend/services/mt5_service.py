@@ -1,8 +1,14 @@
 import logging
+import platform
 from datetime import datetime
 from typing import Optional
 
-import MetaTrader5 as mt5
+try:
+    import MetaTrader5 as mt5
+    HAS_MT5 = True
+except ImportError:
+    mt5 = None
+    HAS_MT5 = False
 
 from config import MT5_DEV, MT5_MAGIC, MT5_TIMEOUT
 from repositories.connection_repo import save_connection, get_connection, disconnect, update_account_info
@@ -14,6 +20,9 @@ _demo_cache: dict = {}
 
 
 def _init_mt5() -> bool:
+    if not HAS_MT5:
+        logger.warning("MetaTrader5 package not available (non-Windows platform)")
+        return False
     if not mt5.initialize():
         logger.error(f"MT5 init failed: {mt5.last_error()}")
         return False
@@ -21,7 +30,8 @@ def _init_mt5() -> bool:
 
 
 def _shutdown():
-    mt5.shutdown()
+    if HAS_MT5:
+        mt5.shutdown()
 
 
 def connect_account(user_id: int, broker_name: str, login_id: int, password: str,

@@ -2,7 +2,12 @@ import logging
 import random
 from datetime import datetime
 
-import MetaTrader5 as mt5
+try:
+    import MetaTrader5 as mt5
+    HAS_MT5 = True
+except ImportError:
+    mt5 = None
+    HAS_MT5 = False
 
 from config import MT5_DEV, MT5_MAGIC, MT5_TIMEOUT
 from repositories.connection_repo import get_connection
