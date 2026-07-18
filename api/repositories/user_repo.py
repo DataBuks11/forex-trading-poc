@@ -1,15 +1,20 @@
 from database import get_db
-from passlib.context import CryptContext
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+import hashlib
+import os
 
 
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    salt = os.urandom(32).hex()
+    pwdhash = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 100000).hex()
+    return f"{salt}${pwdhash}"
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+    try:
+        salt, pwdhash = hashed.split("$")
+        return pwdhash == hashlib.pbkdf2_hmac("sha256", plain.encode(), salt.encode(), 100000).hex()
+    except Exception:
+        return False
 
 
 def create_user(username: str, password: str, email: str = "", full_name: str = "") -> dict | None:
