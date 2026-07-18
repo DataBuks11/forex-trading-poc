@@ -28,15 +28,13 @@ def health():
     except Exception as e:
         return {"status": "ok", "version": "2.0.0", "db_error": str(e)}
 
-@app.post("/api/debug-register")
-async def debug_register(req: Request):
+@app.post("/api/debug-svc-register")
+async def debug_svc_register(req: Request):
     try:
         data = await req.json()
-        username = data.get("username", "test")
-        password = data.get("password", "test")
-        from repositories.user_repo import create_user
-        user = create_user(username, password)
-        return {"success": True, "user": user}
+        from services.auth_service import register_user
+        result = register_user(data["username"], data["password"], data.get("email",""), data.get("full_name",""))
+        return {"success": True, "token": result["access_token"][:20]}
     except Exception as e:
         import traceback
         return {"success": False, "error": str(e), "trace": traceback.format_exc()}
