@@ -20,15 +20,9 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.detail || data.message || "Login failed");
-      }
+      const api = (await import("@/lib/api")).default;
+      const res = await api.post("/auth/login", { username, password });
+      const data = res.data;
       localStorage.setItem("forex_poc_token", data.access_token);
       login(data.access_token, data.user);
       toast.success("Logged in successfully");
