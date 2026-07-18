@@ -1,11 +1,11 @@
 {
   "services": {
     "frontend": {
-      "directory": "frontend",
+      "root": "frontend",
       "type": "nextjs"
     },
     "backend": {
-      "directory": "api",
+      "root": "api",
       "type": "python"
     }
   }
