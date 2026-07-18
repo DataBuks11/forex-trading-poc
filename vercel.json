@@ -1,14 +1,12 @@
 {
-  "services": [
-    {
-      "name": "frontend",
+  "services": {
+    "frontend": {
       "directory": "frontend",
       "type": "nextjs"
     },
-    {
-      "name": "backend",
+    "backend": {
       "directory": "api",
       "type": "python"
     }
-  ]
+  }
 }
