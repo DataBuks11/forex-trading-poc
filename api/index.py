@@ -15,9 +15,55 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+VERSION = "2.0.0"
+
+
+@app.get("/")
+def root():
+    return {
+        "service": "ForexTrade API",
+        "status": "online",
+        "version": VERSION,
+        "documentation": "/docs",
+        "health": "/api/health",
+    }
+
+
+@app.get("/api/version")
+def api_version():
+    return {"version": VERSION}
+
+
+@app.get("/api/status")
+def api_status():
+    return {"status": "online", "version": VERSION, "uptime": "operational"}
+
+
+@app.get("/api/info")
+def api_info():
+    return {
+        "service": "ForexTrade API",
+        "version": VERSION,
+        "description": "Automated Forex Trading Platform with MT5 integration and TradingView webhook support.",
+        "docs": "/docs",
+        "redoc": "/redoc",
+        "health": "/api/health",
+        "endpoints": {
+            "auth": "/api/auth",
+            "mt5": "/api/mt5",
+            "dashboard": "/api/dashboard",
+            "webhook": "/api/webhook/tradingview",
+            "trades": "/api/trades",
+            "activity": "/api/activity",
+            "settings": "/api/settings",
+        },
+    }
+
+
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "1.0.0"}
+    return {"status": "ok", "version": VERSION}
+
 
 from database import init_db
 init_db()

@@ -38,6 +38,17 @@ def tradingview_webhook(payload: TradeWebhookPayload, request: Request):
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid or disabled webhook secret.")
 
+
+@router.get("/tradingview")
+def tradingview_webhook_info():
+    """Informational endpoint for the TradingView webhook."""
+    return {
+        "service": "TradingView Webhook",
+        "status": "active",
+        "method": "POST",
+        "message": "This endpoint accepts TradingView webhook POST requests only.",
+    }
+
     try:
         result = process_webhook(
             user_id=user_id,
