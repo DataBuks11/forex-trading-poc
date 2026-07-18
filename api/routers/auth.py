@@ -6,7 +6,7 @@ from middleware import get_current_user, TokenData
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 
 
-@router.post("/register", response_model=TokenResponse)
+@router.post("/register")
 def register(payload: RegisterRequest):
     """Register a new user account. Returns JWT token on success."""
     try:
