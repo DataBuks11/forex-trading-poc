@@ -29,9 +29,9 @@ def health():
         return {"status": "ok", "version": "2.0.0", "db_error": str(e)}
 
 @app.post("/api/debug-register")
-async def debug_register(request):
+async def debug_register(req: Request):
     try:
-        data = await request.json()
+        data = await req.json()
         username = data.get("username", "test")
         password = data.get("password", "test")
         from repositories.user_repo import create_user
