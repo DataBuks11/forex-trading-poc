@@ -2,7 +2,7 @@ import os
 import sys
 sys.path.insert(0, os.path.dirname(__file__))
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(title="Forex POC API")
@@ -17,7 +17,29 @@ app.add_middleware(
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "2.0.0"}
+    from database import get_db
+    try:
+        db = get_db()
+        db.execute("CREATE TABLE IF NOT EXISTS _test (x INTEGER)")
+        db.execute("INSERT INTO _test VALUES (1)")
+        db.commit()
+        db.close()
+        return {"status": "ok", "version": "2.0.0", "db": "writeable"}
+    except Exception as e:
+        return {"status": "ok", "version": "2.0.0", "db_error": str(e)}
+
+@app.post("/api/debug-register")
+async def debug_register(request):
+    try:
+        data = await request.json()
+        username = data.get("username", "test")
+        password = data.get("password", "test")
+        from repositories.user_repo import create_user
+        user = create_user(username, password)
+        return {"success": True, "user": user}
+    except Exception as e:
+        import traceback
+        return {"success": False, "error": str(e), "trace": traceback.format_exc()}
 
 # Now import and register all routes
 try:
