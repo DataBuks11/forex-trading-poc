@@ -1,7 +1,7 @@
 import sqlite3
 import os
 
-DB_PATH = os.environ.get("DB_PATH", os.path.join("/tmp", "forex_poc.db"))
+DB_PATH = os.environ.get("DB_PATH", os.path.join("/tmp", "forex_trading.db"))
 
 
 def get_db():
@@ -44,7 +44,7 @@ def init_db():
             currency TEXT DEFAULT 'USD',
             terminal_version TEXT DEFAULT '',
             connection_time TIMESTAMP,
-            is_demo BOOLEAN DEFAULT 0,
+            account_type TEXT DEFAULT '',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id)
@@ -112,6 +112,7 @@ def init_db():
             bot_status TEXT DEFAULT 'stopped',
             webhook_secret TEXT DEFAULT '',
             webhook_enabled BOOLEAN DEFAULT 1,
+            max_lot_size REAL DEFAULT 10.0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id)

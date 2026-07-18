@@ -22,4 +22,4 @@ class MT5AccountInfo(BaseModel):
     terminal_version: str = ""
     connection_time: Optional[str] = None
     is_connected: bool = False
-    is_demo: bool = False
+    account_type: str = ""

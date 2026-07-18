@@ -3,8 +3,9 @@
 import { useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Loader2 } from "lucide-react";
 import toast from "react-hot-toast";
+import api from "@/lib/api";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
@@ -15,13 +16,12 @@ export default function ForgotPasswordPage() {
     e.preventDefault();
     setLoading(true);
     try {
-      await fetch("/api/auth/forgot-password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
-      });
-    } catch {
-      // Silently ignore errors for security
+      await api.post("/auth/forgot-password", { email });
+      toast.success("If an account exists, a reset link has been sent");
+    } catch (err: unknown) {
+      // Silently handle errors for security - still show success
+      const message = err instanceof Error ? err.message : "Request failed";
+      toast.error(message);
     } finally {
       setLoading(false);
       setSubmitted(true);
@@ -84,8 +84,9 @@ export default function ForgotPasswordPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-2 px-4 bg-primary text-primary-foreground rounded-md font-medium text-sm hover:opacity-90 disabled:opacity-50 transition-opacity"
+              className="w-full py-2 px-4 bg-primary text-primary-foreground rounded-md font-medium text-sm hover:opacity-90 disabled:opacity-50 transition-opacity flex items-center justify-center gap-2"
             >
+              {loading && <Loader2 className="w-4 h-4 animate-spin" />}
               {loading ? "Sending..." : "Send Reset Link"}
             </button>
 

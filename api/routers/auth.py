@@ -1,25 +1,27 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from schemas.auth import LoginRequest, RegisterRequest, TokenResponse, ForgotPasswordRequest
 from services.auth_service import register_user, login_user, forgot_password
-from middleware import get_current_user, TokenData
+from middleware import get_current_user, TokenData, rate_limit_ip
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 
 
 @router.post("/register")
-def register(payload: RegisterRequest):
+def register(payload: RegisterRequest, request: Request):
     """Register a new user account. Returns JWT token on success."""
+    rate_limit_ip(request)
     try:
         result = register_user(payload.username, payload.password,
-                               payload.email, payload.full_name)
+                                payload.email, payload.full_name)
         return result
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(payload: LoginRequest):
+def login(payload: LoginRequest, request: Request):
     """Login with username and password. Returns JWT token."""
+    rate_limit_ip(request)
     try:
         result = login_user(payload.username, payload.password)
         return result
@@ -42,7 +44,8 @@ def me(current_user: TokenData = Depends(get_current_user)):
 
 
 @router.post("/forgot-password")
-def forgot_pw(payload: ForgotPasswordRequest):
-    """Request a password reset. (Demo: always returns success for security)."""
+def forgot_pw(payload: ForgotPasswordRequest, request: Request):
+    """Request a password reset link."""
+    rate_limit_ip(request)
     forgot_password(payload.email)
     return {"message": "If the email exists, a reset link has been sent."}

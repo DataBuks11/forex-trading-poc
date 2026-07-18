@@ -40,8 +40,8 @@ export function Sidebar() {
             <TrendingUp className="w-5 h-5 text-primary" />
           </div>
           <div>
-            <span className="font-bold text-sm">ForexPOC</span>
-            <p className="text-[10px] text-muted-foreground">Pro Trading</p>
+            <span className="font-bold text-sm">ForexTrade</span>
+            <p className="text-[10px] text-muted-foreground">Trading Platform</p>
           </div>
         </div>
       </div>

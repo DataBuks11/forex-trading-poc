@@ -15,6 +15,8 @@ import {
   Loader2,
   ArrowLeft,
   Zap,
+  AlertTriangle,
+  ShieldAlert,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useQueryClient } from "@tanstack/react-query";
@@ -85,7 +87,10 @@ export default function AutoTradingPage() {
   const isConnected = mt5Status?.is_connected === true;
 
   const [defaultLotSize, setDefaultLotSize] = useState("0.01");
+  const [maxLotSize, setMaxLotSize] = useState("1.0");
   const [riskPercent, setRiskPercent] = useState("2");
+  const [maxDailyLoss, setMaxDailyLoss] = useState("500");
+  const [maxDrawdown, setMaxDrawdown] = useState("20");
   const [defaultSl, setDefaultSl] = useState("30");
   const [defaultTp, setDefaultTp] = useState("60");
   const [maxOpenTrades, setMaxOpenTrades] = useState("5");
@@ -95,11 +100,16 @@ export default function AutoTradingPage() {
 
   const [botActionLoading, setBotActionLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [showStopConfirm, setShowStopConfirm] = useState(false);
+  const [emergencyStopping, setEmergencyStopping] = useState(false);
 
   useEffect(() => {
     if (settings) {
       if (settings.default_lot_size != null) setDefaultLotSize(String(settings.default_lot_size));
+      if (settings.max_lot_size != null) setMaxLotSize(String(settings.max_lot_size));
       if (settings.risk_percent != null) setRiskPercent(String(settings.risk_percent));
+      if (settings.max_daily_loss != null) setMaxDailyLoss(String(settings.max_daily_loss));
+      if (settings.max_drawdown != null) setMaxDrawdown(String(settings.max_drawdown));
       if (settings.default_sl != null) setDefaultSl(String(settings.default_sl));
       if (settings.default_tp != null) setDefaultTp(String(settings.default_tp));
       if (settings.max_open_trades != null) setMaxOpenTrades(String(settings.max_open_trades));
@@ -127,12 +137,30 @@ export default function AutoTradingPage() {
     }
   };
 
+  const handleEmergencyStop = async () => {
+    setEmergencyStopping(true);
+    try {
+      await api.put("/settings/auto-trading", { bot_status: "stopped" });
+      queryClient.invalidateQueries({ queryKey: ["settings"] });
+      toast.success("EMERGENCY STOP executed - Bot has been stopped");
+      setShowStopConfirm(false);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Emergency stop failed";
+      toast.error(message);
+    } finally {
+      setEmergencyStopping(false);
+    }
+  };
+
   const handleSaveSettings = async () => {
     setSaving(true);
     try {
       const payload = {
         default_lot_size: parseFloat(defaultLotSize) || 0.01,
+        max_lot_size: parseFloat(maxLotSize) || 1.0,
         risk_percent: parseFloat(riskPercent) || 2,
+        max_daily_loss: parseFloat(maxDailyLoss) || 500,
+        max_drawdown: parseFloat(maxDrawdown) || 20,
         default_sl: parseInt(defaultSl) || 30,
         default_tp: parseInt(defaultTp) || 60,
         max_open_trades: parseInt(maxOpenTrades) || 5,
@@ -263,7 +291,74 @@ export default function AutoTradingPage() {
             </button>
           </div>
         </div>
+
+        <div className="mt-6 pt-4 border-t border-border">
+          <button
+            onClick={() => setShowStopConfirm(true)}
+            disabled={emergencyStopping}
+            className="w-full py-3.5 bg-red-600 hover:bg-red-500 text-white rounded-md text-base font-bold disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 shadow-lg shadow-red-900/30"
+          >
+            {emergencyStopping ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              <ShieldAlert className="w-5 h-5" />
+            )}
+            EMERGENCY STOP
+          </button>
+        </div>
       </motion.div>
+
+      {/* Emergency Stop Confirmation Dialog */}
+      <AnimatePresence>
+        {showStopConfirm && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+            onClick={() => setShowStopConfirm(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-card border border-destructive/30 rounded-lg p-6 max-w-md w-full mx-4 shadow-2xl"
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center">
+                  <AlertTriangle className="w-6 h-6 text-red-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-red-400">Emergency Stop</h3>
+                  <p className="text-sm text-muted-foreground">This action cannot be undone</p>
+                </div>
+              </div>
+
+              <p className="text-sm text-foreground mb-4">
+                This will immediately stop the trading bot and close all automated trading activity. All open positions will remain as-is. Are you sure you want to proceed?
+              </p>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowStopConfirm(false)}
+                  className="flex-1 py-2.5 px-4 bg-muted border border-border rounded-md text-sm font-medium hover:bg-muted/70 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleEmergencyStop}
+                  disabled={emergencyStopping}
+                  className="flex-1 py-2.5 px-4 bg-red-600 hover:bg-red-500 text-white rounded-md text-sm font-bold disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+                >
+                  {emergencyStopping && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {emergencyStopping ? "Stopping..." : "Yes, Emergency Stop"}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <motion.div
         {...fadeIn}
@@ -293,7 +388,21 @@ export default function AutoTradingPage() {
 
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-muted-foreground">
-              Risk %
+              Max Lot Size
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              min="0.01"
+              value={maxLotSize}
+              onChange={(e) => setMaxLotSize(e.target.value)}
+              className={inputClass}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground">
+              Risk Per Trade (%)
             </label>
             <input
               type="number"
@@ -303,6 +412,39 @@ export default function AutoTradingPage() {
               value={riskPercent}
               onChange={(e) => setRiskPercent(e.target.value)}
               className={inputClass}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+              <ShieldAlert className="w-3.5 h-3.5 text-red-400" />
+              Max Daily Loss (USD)
+            </label>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={maxDailyLoss}
+              onChange={(e) => setMaxDailyLoss(e.target.value)}
+              className={cn(inputClass, "border-red-500/20 focus:ring-red-500/50")}
+              placeholder="e.g. 500"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+              <ShieldAlert className="w-3.5 h-3.5 text-red-400" />
+              Max Drawdown (%)
+            </label>
+            <input
+              type="number"
+              min="0"
+              max="100"
+              step="0.1"
+              value={maxDrawdown}
+              onChange={(e) => setMaxDrawdown(e.target.value)}
+              className={cn(inputClass, "border-red-500/20 focus:ring-red-500/50")}
+              placeholder="e.g. 20"
             />
           </div>
 

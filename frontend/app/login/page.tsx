@@ -23,7 +23,7 @@ export default function LoginPage() {
       const api = (await import("@/lib/api")).default;
       const res = await api.post("/auth/login", { username, password });
       const data = res.data;
-      localStorage.setItem("forex_poc_token", data.access_token);
+      localStorage.setItem("forex_trading_token", data.access_token);
       login(data.access_token, data.user);
       toast.success("Logged in successfully");
       router.push("/dashboard");
@@ -46,7 +46,7 @@ export default function LoginPage() {
         <div className="text-center space-y-2">
           <h1 className="text-2xl font-bold tracking-tight">Welcome back</h1>
           <p className="text-sm text-muted-foreground">
-            Sign in to your ForexPOC account
+            Sign in to your ForexTrade account
           </p>
         </div>
 

@@ -5,13 +5,13 @@ from datetime import datetime
 
 class LoginRequest(BaseModel):
     username: str = Field(..., min_length=3, max_length=50)
-    password: str = Field(..., min_length=4)
+    password: str = Field(..., min_length=8)
 
 
 class RegisterRequest(BaseModel):
     username: str = Field(..., min_length=3, max_length=50)
     email: str = ""
-    password: str = Field(..., min_length=6)
+    password: str = Field(..., min_length=8)
     full_name: str = ""
 
 
@@ -21,7 +21,7 @@ class ForgotPasswordRequest(BaseModel):
 
 class ResetPasswordRequest(BaseModel):
     token: str
-    new_password: str = Field(..., min_length=6)
+    new_password: str = Field(..., min_length=8)
 
 
 class TokenResponse(BaseModel):

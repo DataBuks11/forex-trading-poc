@@ -9,6 +9,9 @@ import {
   Shield,
   Activity,
   Zap,
+  Percent,
+  Target,
+  DollarSign,
 } from "lucide-react";
 import { useDashboard, useMT5Status } from "@/hooks/use-data";
 import { cn, formatCurrency, formatNumber, timeAgo, formatDateTime } from "@/lib/utils";
@@ -90,7 +93,7 @@ export default function DashboardPage() {
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-muted-foreground">Type</span>
                   <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-blue-500/10 text-blue-400">
-                    {mt5Status?.is_demo ? "Demo" : "Live"}
+                    {mt5Status?.account_type || "N/A"}
                   </span>
                 </div>
               </>
@@ -112,7 +115,7 @@ export default function DashboardPage() {
                 { label: "Balance", value: formatCurrency(account.balance, account.currency), icon: Wallet, color: "text-emerald-400" },
                 { label: "Equity", value: formatCurrency(account.equity, account.currency), icon: PiggyBank, color: "text-blue-400" },
                 { label: "Margin", value: formatCurrency(account.margin, account.currency), icon: TrendingUp, color: "text-amber-400" },
-                { label: "Free Margin", value: formatCurrency(account.balance - account.margin, account.currency), icon: Shield, color: "text-purple-400" },
+                { label: "Free Margin", value: formatCurrency(account.free_margin ?? (account.balance - account.margin), account.currency), icon: Shield, color: "text-purple-400" },
               ].map(({ label, value, icon: Icon, color }) => (
                 <div
                   key={label}
@@ -144,16 +147,21 @@ export default function DashboardPage() {
           {stats ? (
             <div className="grid grid-cols-2 gap-3">
               {[
-                { label: "Total Trades", value: formatNumber(stats.total_trades ?? 0, 0), color: "text-blue-400" },
-                { label: "Open Positions", value: formatNumber(stats.open_positions ?? 0, 0), color: "text-amber-400" },
-                { label: "Profit Today", value: ((stats.profit_today ?? 0) >= 0 ? "+" : "") + formatCurrency(stats.profit_today ?? 0), color: (stats.profit_today ?? 0) >= 0 ? "text-emerald-400" : "text-red-400" },
-              ].slice(0, 3).map(({ label, value, color }) => (
+                { label: "Total Trades", value: formatNumber(stats.total_trades ?? 0, 0), icon: TrendingUp, color: "text-blue-400" },
+                { label: "Open Positions", value: formatNumber(stats.open_positions ?? 0, 0), icon: Target, color: "text-amber-400" },
+                { label: "Today's Profit", value: ((stats.profit_today ?? 0) >= 0 ? "+" : "") + formatCurrency(stats.profit_today ?? 0), icon: DollarSign, color: (stats.profit_today ?? 0) >= 0 ? "text-emerald-400" : "text-red-400" },
+                { label: "Floating P/L", value: ((stats.floating_pl ?? 0) >= 0 ? "+" : "") + formatCurrency(stats.floating_pl ?? 0), icon: Activity, color: (stats.floating_pl ?? 0) >= 0 ? "text-emerald-400" : "text-red-400" },
+                { label: "Win Rate", value: stats.win_rate != null ? formatNumber(stats.win_rate, 1) + "%" : "-", icon: Percent, color: "text-purple-400" },
+              ].map(({ label, value, icon: Icon, color }) => (
                 <div
                   key={label}
                   className="bg-muted/30 border border-border rounded-md p-3"
                 >
-                  <span className="text-xs text-muted-foreground block mb-1">{label}</span>
-                  <p className={cn("text-lg font-mono font-semibold", color)}>
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <Icon className={cn("w-3.5 h-3.5", color)} />
+                    <span className="text-xs text-muted-foreground">{label}</span>
+                  </div>
+                  <p className={cn("text-sm font-mono font-semibold", color)}>
                     {value}
                   </p>
                 </div>

@@ -8,7 +8,7 @@ export default function Home() {
   const router = useRouter();
 
   useEffect(() => {
-    const token = localStorage.getItem("forex_poc_token");
+    const token = localStorage.getItem("forex_trading_token");
     if (token) {
       router.push("/dashboard");
     } else {

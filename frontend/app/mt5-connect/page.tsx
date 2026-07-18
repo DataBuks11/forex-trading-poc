@@ -16,7 +16,6 @@ import {
   User,
   Building2,
   ExternalLink,
-  Info,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import api from "@/lib/api";
@@ -154,7 +153,7 @@ export default function MT5ConnectPage() {
             </label>
             <input
               type="text"
-              placeholder="e.g. ICMarkets, FXPro"
+              placeholder="e.g. ICMarkets, FXPro, Exness, Pepperstone"
               value={brokerName}
               onChange={(e) => setBrokerName(e.target.value)}
               required
@@ -199,7 +198,7 @@ export default function MT5ConnectPage() {
             </label>
             <input
               type="text"
-              placeholder="e.g. ICMarkets-Demo"
+              placeholder="e.g. ICMarkets-Demo, ICMarkets-Live, Exness-Real"
               value={serverName}
               onChange={(e) => setServerName(e.target.value)}
               required
@@ -242,14 +241,6 @@ export default function MT5ConnectPage() {
               Remember Credentials
             </span>
           </label>
-
-          <div className="bg-blue-500/5 border border-blue-500/15 rounded-md p-3 flex items-start gap-2">
-            <Info className="w-4 h-4 text-blue-400 mt-0.5 shrink-0" />
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              Use &apos;Demo&apos; in broker or server name for demo mode (no
-              MT5 terminal required)
-            </p>
-          </div>
 
           {testResult && (
             <div
@@ -336,9 +327,14 @@ export default function MT5ConnectPage() {
                 icon: User,
               },
               {
+                label: "Account Type",
+                value: account.account_type ?? "-",
+                icon: Building2,
+              },
+              {
                 label: "Broker",
                 value: account.broker ?? "-",
-                icon: Building2,
+                icon: Server,
               },
               {
                 label: "Balance",
@@ -398,6 +394,11 @@ export default function MT5ConnectPage() {
                 label: "Connection Time",
                 value: account.connection_time ?? "-",
                 icon: Plug,
+              },
+              {
+                label: "Server",
+                value: account.server_name ?? account.server ?? "-",
+                icon: Server,
               },
             ].map(({ label, value, icon: Icon }) => (
               <motion.div

@@ -8,7 +8,7 @@ router = APIRouter(prefix="/api/mt5", tags=["MT5 Connection"])
 
 @router.post("/connect", response_model=MT5AccountInfo)
 def mt5_connect(payload: MT5ConnectRequest, user: TokenData = Depends(get_current_user)):
-    """Connect to MetaTrader 5 account. Use 'Demo' in broker/server name for demo mode."""
+    """Connect to MetaTrader 5 account with real broker credentials."""
     try:
         result = connect_account(user.user_id, payload.broker_name,
                                  payload.login_id, payload.password, payload.server_name)

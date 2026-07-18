@@ -1,34 +1,58 @@
-from fastapi import APIRouter, HTTPException, Depends, Query
+import os
+from fastapi import APIRouter, HTTPException, Depends, Query, Header, Request
 from schemas.trade import TradeWebhookPayload
 from services.webhook_service import process_webhook
 from repositories.webhook_repo import get_webhook_logs, get_last_webhook
-from repositories.settings_repo import get_settings, regenerate_secret, update_settings
+from repositories.settings_repo import get_settings, regenerate_secret, update_settings, get_webhook_secret
+from repositories.user_repo import get_user_by_id
 from middleware import get_current_user, TokenData
+from config import API_DOMAIN
 
 router = APIRouter(prefix="/api/webhook", tags=["TradingView Webhook"])
 
 
+def _resolve_user_from_secret(secret: str) -> int | None:
+    if not secret:
+        return None
+    from database import get_db
+    db = get_db()
+    try:
+        row = db.execute("SELECT user_id FROM settings WHERE webhook_secret=? AND webhook_enabled=1",
+                         (secret,)).fetchone()
+        if row:
+            return row["user_id"]
+        return None
+    finally:
+        db.close()
+
+
 @router.post("/tradingview")
-def tradingview_webhook(payload: TradeWebhookPayload):
-    """Receive TradingView alerts. Executes trades on the connected MT5 account.
-    
-    Currently uses user_id=1 for webhook routing. Pass secret for security.
-    """
+def tradingview_webhook(payload: TradeWebhookPayload, request: Request):
+    """Receive TradingView alerts. Requires a valid webhook secret via query param or header."""
+    secret = payload.secret or request.query_params.get("secret") or request.headers.get("X-Webhook-Secret", "")
+
+    if not secret:
+        raise HTTPException(status_code=401, detail="Webhook secret is required. Provide via payload.secret, ?secret=, or X-Webhook-Secret header.")
+
+    user_id = _resolve_user_from_secret(secret)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Invalid or disabled webhook secret.")
+
     try:
         result = process_webhook(
-            user_id=1,
+            user_id=user_id,
             symbol=payload.symbol,
             action=payload.action,
             lot=payload.lot,
             sl=payload.sl or 0,
             tp=payload.tp or 0,
-            secret=payload.secret or "",
+            secret=secret,
         )
         return result
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except RuntimeError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Trade execution failed. Check logs for details.")
 
 
 @router.get("/history")
@@ -51,7 +75,7 @@ def webhook_settings(user: TokenData = Depends(get_current_user)):
     return {
         "webhook_enabled": settings.get("webhook_enabled", 1),
         "webhook_secret": settings.get("webhook_secret", ""),
-        "webhook_url": "http://127.0.0.1:8000/api/webhook/tradingview",
+        "webhook_url": f"https://{API_DOMAIN}/api/webhook/tradingview",
     }
 
 
@@ -71,10 +95,7 @@ def regen_secret(user: TokenData = Depends(get_current_user)):
 
 @router.post("/test")
 def test_webhook(user: TokenData = Depends(get_current_user)):
-    """Simulate a TradingView webhook signal from the UI.
-    
-    Sends a test BUY order for EURUSD with 0.01 lot.
-    """
+    """Send a test BUY order for EURUSD with 0.01 lot via authenticated user."""
     try:
         result = process_webhook(
             user_id=user.user_id,
@@ -88,4 +109,4 @@ def test_webhook(user: TokenData = Depends(get_current_user)):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except RuntimeError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Trade execution failed. Check logs for details.")

@@ -26,6 +26,8 @@ import api from "@/lib/api";
 import { cn, formatDateTime, copyToClipboard } from "@/lib/utils";
 import { useWebhookSettings, useWebhookHistory, useLastSignal, useMT5Status } from "@/hooks/use-data";
 
+const WEBHOOK_URL = "https://api-woad-ten-44.vercel.app/api/webhook/tradingview";
+
 const fadeIn = {
   initial: { opacity: 0, y: 20 },
   animate: { opacity: 1, y: 0 },
@@ -70,7 +72,7 @@ export default function TradingViewPage() {
   const isConnected = mt5Status?.is_connected === true;
   const isLoading = mt5Loading || settingsLoading || signalLoading || historyLoading;
 
-  const webhookUrl = "http://127.0.0.1:8000/api/webhook/tradingview";
+  const webhookUrl = webhookSettings?.webhook_url ?? WEBHOOK_URL;
 
   const handleCopyUrl = useCallback(async () => {
     try {

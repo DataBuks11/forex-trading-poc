@@ -3,6 +3,8 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { useRouter } from "next/navigation";
 
+const BASE_URL = "https://api-woad-ten-44.vercel.app/api";
+
 interface User {
   id: number;
   username: string;
@@ -35,10 +37,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
 
   useEffect(() => {
-    const stored = localStorage.getItem("forex_poc_token");
+    const stored = localStorage.getItem("forex_trading_token");
     if (stored) {
       setToken(stored);
-      fetch("/api/auth/me", { headers: { Authorization: `Bearer ${stored}` } })
+      fetch(`${BASE_URL}/auth/me`, { headers: { Authorization: `Bearer ${stored}` } })
         .then((r) => r.json())
         .then((u) => {
           if (u.id) setUser(u);
@@ -51,13 +53,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = (t: string, u: User) => {
-    localStorage.setItem("forex_poc_token", t);
+    localStorage.setItem("forex_trading_token", t);
     setToken(t);
     setUser(u);
   };
 
   const logout = () => {
-    localStorage.removeItem("forex_poc_token");
+    localStorage.removeItem("forex_trading_token");
     setToken(null);
     setUser(null);
     router.push("/login");
