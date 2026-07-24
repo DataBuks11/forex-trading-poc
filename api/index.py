@@ -60,6 +60,24 @@ def api_info():
     }
 
 
+@app.get("/api/test-bridge")
+def test_bridge(bridge_url: str = ""):
+    """Test if the MT5 Bridge is reachable."""
+    if not bridge_url:
+        from repositories.settings_repo import get_settings
+        settings = get_settings(1)  # first user
+        bridge_url = settings.get("bridge_url", "")
+    if not bridge_url:
+        return {"error": "No bridge_url configured"}
+    try:
+        import httpx
+        resp = httpx.get(f"{bridge_url}/health", timeout=10)
+        return {"status": resp.status_code, "body": resp.text, "bridge_url": bridge_url}
+    except httpx.ConnectError as e:
+        return {"error": f"Connection refused: {bridge_url}. Is the bridge running?", "detail": str(e)}
+    except Exception as e:
+        return {"error": str(e), "type": type(e).__name__}
+
 @app.get("/api/health")
 def health():
     try:
