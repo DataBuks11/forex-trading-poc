@@ -6,7 +6,7 @@ from middleware import get_current_user, TokenData
 router = APIRouter(prefix="/api/mt5", tags=["MT5 Connection"])
 
 
-@router.post("/connect", response_model=MT5AccountInfo)
+@router.post("/connect")
 def mt5_connect(payload: MT5ConnectRequest, user: TokenData = Depends(get_current_user)):
     """Connect to MetaTrader 5 account with real broker credentials."""
     try:
@@ -15,16 +15,16 @@ def mt5_connect(payload: MT5ConnectRequest, user: TokenData = Depends(get_curren
         return result
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    except RuntimeError as e:
+    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/status", response_model=MT5AccountInfo)
+@router.get("/status")
 def mt5_status(user: TokenData = Depends(get_current_user)):
     """Get current MT5 connection status and account information."""
     info = get_account_status(user.user_id)
     if not info:
-        return MT5AccountInfo(is_connected=False)
+        return {"is_connected": False}
     return info
 
 
