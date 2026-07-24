@@ -113,6 +113,7 @@ def init_db():
             webhook_secret TEXT DEFAULT '',
             webhook_enabled BOOLEAN DEFAULT 1,
             max_lot_size REAL DEFAULT 10.0,
+            bridge_url TEXT DEFAULT '',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id)
@@ -128,5 +129,10 @@ def init_db():
             FOREIGN KEY (user_id) REFERENCES users(id)
         );
     """)
+    # Migration: add columns that may be missing from older schema
+    try:
+        c.execute("ALTER TABLE settings ADD COLUMN bridge_url TEXT DEFAULT ''")
+    except Exception:
+        pass
     conn.commit()
     conn.close()

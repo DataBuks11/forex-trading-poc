@@ -1,79 +1,96 @@
 import logging
+import httpx
 from datetime import datetime
 
-try:
-    import MetaTrader5 as mt5
-    HAS_MT5 = True
-except ImportError:
-    mt5 = None
-    HAS_MT5 = False
-
-from config import MT5_DEV, MT5_MAGIC, MT5_TIMEOUT
 from repositories.connection_repo import save_connection, get_connection, disconnect, update_account_info
+from repositories.settings_repo import get_settings
 from repositories.activity_repo import log_activity
 
 logger = logging.getLogger("mt5_service")
 
-
-def _init_mt5() -> bool:
-    if not HAS_MT5:
-        return False
-    if not mt5.initialize():
-        logger.error(f"MT5 init failed: {mt5.last_error()}")
-        return False
-    return True
+TIMEOUT = 30
 
 
-def _shutdown():
-    if HAS_MT5:
-        mt5.shutdown()
+def _get_bridge_url(user_id: int) -> str:
+    settings = get_settings(user_id)
+    url = settings.get("bridge_url", "").rstrip("/")
+    if not url:
+        raise RuntimeError(
+            "MT5 Bridge not configured. Install and run the MT5 Bridge on your Windows PC, "
+            "then enter the bridge URL in Settings. See documentation for setup instructions."
+        )
+    return url
+
+
+def _check_response(resp: httpx.Response):
+    if resp.status_code >= 400:
+        detail = "Unknown error"
+        try:
+            detail = resp.json().get("detail", resp.text)
+        except Exception:
+            detail = resp.text
+        raise RuntimeError(detail)
 
 
 def connect_account(user_id: int, broker_name: str, login_id: int, password: str,
                     server_name: str) -> dict:
-    if not HAS_MT5 or not _init_mt5():
-        error_msg = mt5.last_error() if HAS_MT5 else None
-        detail = "MetaTrader 5 terminal is not installed. Please install MT5 from your broker."
-        if error_msg:
-            detail = f"MT5 initialization failed: {error_msg}"
-        raise RuntimeError(detail)
+    bridge_url = _get_bridge_url(user_id)
 
     try:
-        authorized = mt5.login(login=login_id, password=password, server=server_name)
-        if not authorized:
-            error = mt5.last_error()
-            raise ValueError(f"Login failed: {error}")
+        resp = httpx.post(
+            f"{bridge_url}/connect",
+            json={
+                "broker_name": broker_name,
+                "login_id": login_id,
+                "password": password,
+                "server_name": server_name,
+            },
+            timeout=TIMEOUT,
+        )
+    except httpx.ConnectError:
+        raise RuntimeError(
+            f"Could not reach MT5 Bridge at {bridge_url}. "
+            "Ensure the bridge is running on your Windows PC and the URL is accessible."
+        )
+    except httpx.TimeoutException:
+        raise RuntimeError(f"MT5 Bridge at {bridge_url} timed out. Check your network connection.")
 
-        info = mt5.account_info()
-        if not info:
-            raise ValueError("Could not fetch account information")
+    _check_response(resp)
+    data = resp.json()
+    account = data.get("account", data)
 
-        terminal = mt5.terminal_info()
-        tv = f"Build {terminal.build}" if terminal else ""
+    account_data = {
+        "account_number": account.get("account_number", 0),
+        "balance": account.get("balance", 0),
+        "equity": account.get("equity", 0),
+        "margin": account.get("margin", 0),
+        "free_margin": account.get("free_margin", 0),
+        "leverage": account.get("leverage", 0),
+        "currency": account.get("currency", "USD"),
+        "terminal_version": f"Build {account.get('terminal_build', '')}",
+        "connection_time": account.get("connected_at", datetime.utcnow().isoformat()),
+    }
 
-        account_type = "demo" if info.trade_mode == 0 else "live"
+    account_type = account.get("account_type", "live")
+    save_connection(user_id, broker_name, login_id, password, server_name, account_data, account_type)
+    log_activity(user_id, "broker_connected", f"Connected to {broker_name} ({server_name}) via Bridge")
 
-        account_data = {
-            "account_number": info.login,
-            "balance": info.balance,
-            "equity": info.equity,
-            "margin": info.margin,
-            "free_margin": info.margin_free if hasattr(info, 'margin_free') else info.balance - info.margin,
-            "leverage": info.leverage,
-            "currency": info.currency,
-            "terminal_version": tv,
-            "connection_time": datetime.utcnow().isoformat(),
-        }
-
-        save_connection(user_id, broker_name, login_id, password, server_name, account_data, account_type)
-        log_activity(user_id, "broker_connected", f"Connected to {broker_name} ({server_name})")
-    finally:
-        _shutdown()
-
-    account_data["broker"] = broker_name
-    account_data["is_connected"] = True
-    account_data["account_type"] = account_type
-    return account_data
+    result = {
+        "broker": broker_name,
+        "account_number": account_data["account_number"],
+        "balance": account_data["balance"],
+        "equity": account_data["equity"],
+        "margin": account_data["margin"],
+        "free_margin": account_data["free_margin"],
+        "leverage": account_data["leverage"],
+        "currency": account_data["currency"],
+        "terminal_version": account_data["terminal_version"],
+        "connection_time": account_data["connection_time"],
+        "is_connected": True,
+        "account_type": account_type,
+        "company": account.get("company", broker_name),
+    }
+    return result
 
 
 def get_account_status(user_id: int) -> dict | None:
@@ -81,91 +98,63 @@ def get_account_status(user_id: int) -> dict | None:
     if not stored:
         return None
 
-    if not HAS_MT5 or not _init_mt5():
+    bridge_url = _get_bridge_url(user_id)
+
+    try:
+        resp = httpx.get(f"{bridge_url}/account", timeout=TIMEOUT)
+        _check_response(resp)
+        data = resp.json()
+
+        result = {
+            "account_number": data.get("account_number", stored["account_number"]),
+            "broker": stored["broker_name"],
+            "balance": data.get("balance", stored["balance"]),
+            "equity": data.get("equity", stored["equity"]),
+            "margin": data.get("margin", stored["margin"]),
+            "free_margin": data.get("free_margin", stored.get("free_margin", 0)),
+            "leverage": data.get("leverage", stored["leverage"]),
+            "currency": data.get("currency", stored["currency"]),
+            "terminal_version": stored.get("terminal_version", ""),
+            "connection_time": stored.get("connection_time", ""),
+            "is_connected": True,
+            "account_type": data.get("account_type", stored.get("account_type", "")),
+            "company": data.get("company", stored["broker_name"]),
+        }
+        update_account_info(user_id, result)
+        return result
+    except (httpx.ConnectError, httpx.TimeoutException):
         return {
             "account_number": stored["account_number"],
             "broker": stored["broker_name"],
             "balance": stored["balance"],
             "equity": stored["equity"],
             "margin": stored["margin"],
-            "free_margin": stored["free_margin"],
+            "free_margin": stored.get("free_margin", 0),
             "leverage": stored["leverage"],
             "currency": stored["currency"],
             "terminal_version": stored.get("terminal_version", ""),
             "connection_time": stored.get("connection_time", ""),
             "is_connected": True,
             "account_type": stored.get("account_type", ""),
+            "company": stored["broker_name"],
         }
-
-    try:
-        authorized = mt5.login(login=stored["login_id"], password=stored["password"], server=stored["server_name"])
-        if not authorized:
-            disconnect(user_id)
-            return None
-        info = mt5.account_info()
-        if not info:
-            return None
-
-        account_type = "demo" if info.trade_mode == 0 else "live"
-
-        result = {
-            "account_number": info.login,
-            "broker": stored["broker_name"],
-            "balance": info.balance,
-            "equity": info.equity,
-            "margin": info.margin,
-            "free_margin": info.margin_free if hasattr(info, 'margin_free') else info.balance - info.margin,
-            "leverage": info.leverage,
-            "currency": info.currency,
-            "terminal_version": stored.get("terminal_version", ""),
-            "connection_time": stored.get("connection_time", ""),
-            "is_connected": True,
-            "account_type": account_type,
-        }
-        update_account_info(user_id, result)
-        return result
-    finally:
-        _shutdown()
 
 
 def get_open_positions(user_id: int) -> list:
-    stored = get_connection(user_id)
-    if not stored:
-        return []
-
-    if not HAS_MT5 or not _init_mt5():
-        return []
-
+    bridge_url = _get_bridge_url(user_id)
     try:
-        authorized = mt5.login(login=stored["login_id"], password=stored["password"], server=stored["server_name"])
-        if not authorized:
-            return []
-        positions = mt5.positions_get()
-        if not positions:
-            return []
-        result = []
-        for pos in positions:
-            result.append({
-                "ticket": pos.ticket,
-                "symbol": pos.symbol,
-                "type": "BUY" if pos.type == 0 else "SELL",
-                "volume": pos.volume,
-                "open_price": pos.price_open,
-                "current_price": pos.price_current,
-                "sl": pos.sl,
-                "tp": pos.tp,
-                "profit": pos.profit,
-                "swap": pos.swap,
-                "commission": pos.commission,
-                "open_time": str(pos.time) if pos.time else "",
-                "comment": pos.comment or "",
-            })
-        return result
-    finally:
-        _shutdown()
+        resp = httpx.get(f"{bridge_url}/positions", timeout=TIMEOUT)
+        _check_response(resp)
+        return resp.json()
+    except Exception:
+        return []
 
 
 def disconnect_account(user_id: int):
+    bridge_url = _get_bridge_url(user_id)
+    try:
+        httpx.post(f"{bridge_url}/disconnect", timeout=10)
+    except Exception:
+        pass
     disconnect(user_id)
     log_activity(user_id, "broker_disconnected", "MT5 disconnected")
-    _shutdown()

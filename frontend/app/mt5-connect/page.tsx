@@ -47,6 +47,7 @@ export default function MT5ConnectPage() {
   const [password, setPassword] = useState("");
   const [serverName, setServerName] = useState("");
   const [remember, setRemember] = useState(true);
+  const [bridgeUrl, setBridgeUrl] = useState("");
   const [connecting, setConnecting] = useState(false);
   const [testing, setTesting] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
@@ -74,6 +75,9 @@ export default function MT5ConnectPage() {
     }
     setConnecting(true);
     try {
+      if (bridgeUrl) {
+        await api.put("/settings", { bridge_url: bridgeUrl });
+      }
       await api.post("/mt5/connect", getPayload());
       toast.success("Connected successfully");
       setTestResult(null);
@@ -139,6 +143,32 @@ export default function MT5ConnectPage() {
         <p className="text-sm text-muted-foreground mt-1">
           Connect your MetaTrader 5 trading account
         </p>
+      </motion.div>
+
+      {/* Bridge Status */}
+      <motion.div
+        {...fadeIn}
+        className="bg-card border border-border rounded-lg p-6"
+      >
+        <div className="flex items-center gap-2 mb-4">
+          <ExternalLink className="w-5 h-5 text-primary" />
+          <h3 className="font-semibold">MT5 Bridge Connection</h3>
+        </div>
+        <div className="bg-muted/50 border border-border rounded-md p-4 text-sm space-y-2">
+          <p className="text-muted-foreground">
+            The MT5 Bridge is a local service that runs on your Windows PC and connects to your installed MetaTrader 5 terminal. The cloud backend communicates with this bridge to execute trades.
+          </p>
+          <ol className="list-decimal list-inside space-y-1 text-xs text-muted-foreground">
+            <li>Install Python 3.10+ on your Windows PC</li>
+            <li>Install MetaTrader 5 terminal and log into your broker account</li>
+            <li>Run the bridge: <code className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono">cd mt5-bridge &amp;&amp; pip install -r requirements.txt &amp;&amp; python bridge.py</code></li>
+            <li>The bridge starts on port <code className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono">8765</code></li>
+            <li>Expose it to the internet using a tunnel (ngrok, localhost.run, etc.)</li>
+            <li>Example: <code className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono">ngrok http 8765</code></li>
+            <li>Copy the ngrok URL (e.g. <code className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono">https://abc123.ngrok-free.app</code>)</li>
+            <li>Enter this URL in the <strong>Bridge URL</strong> field in the connection form below</li>
+          </ol>
+        </div>
       </motion.div>
 
       <motion.div
@@ -241,6 +271,23 @@ export default function MT5ConnectPage() {
               Remember Credentials
             </span>
           </label>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+              <ExternalLink className="w-3.5 h-3.5" />
+              Bridge URL
+            </label>
+            <input
+              type="text"
+              placeholder="https://your-ngrok-url.ngrok-free.app"
+              value={bridgeUrl}
+              onChange={(e) => setBridgeUrl(e.target.value)}
+              className={inputClass}
+            />
+            <p className="text-xs text-muted-foreground">
+              The public URL of your local MT5 Bridge (required for trading).
+            </p>
+          </div>
 
           {testResult && (
             <div

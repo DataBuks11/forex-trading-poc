@@ -1,21 +1,26 @@
 import logging
+import httpx
 from datetime import datetime
 
-try:
-    import MetaTrader5 as mt5
-    HAS_MT5 = True
-except ImportError:
-    mt5 = None
-    HAS_MT5 = False
-
-from config import MT5_DEV, MT5_MAGIC, MT5_TIMEOUT, MAX_LOT_SIZE
 from repositories.connection_repo import get_connection
 from repositories.trade_repo import save_trade, get_trade_history, get_open_trades, get_trade_count
 from repositories.settings_repo import get_settings
 from repositories.activity_repo import log_activity
-from services.mt5_service import _init_mt5, _shutdown
 
 logger = logging.getLogger("trade_service")
+
+TIMEOUT = 30
+
+
+def _get_bridge_url(user_id: int) -> str:
+    settings = get_settings(user_id)
+    url = settings.get("bridge_url", "").rstrip("/")
+    if not url:
+        raise RuntimeError(
+            "MT5 Bridge not configured. Install and run the MT5 Bridge on your Windows PC, "
+            "then enter the bridge URL in Settings."
+        )
+    return url
 
 
 def execute_trade(user_id: int, symbol: str, action: str, lot: float,
@@ -23,9 +28,6 @@ def execute_trade(user_id: int, symbol: str, action: str, lot: float,
     stored = get_connection(user_id)
     if not stored:
         raise RuntimeError("No MT5 connection found. Please connect first.")
-
-    if not HAS_MT5:
-        raise RuntimeError("MetaTrader 5 terminal is not installed. Please install MT5 from your broker.")
 
     settings = get_settings(user_id)
 
@@ -35,69 +37,59 @@ def execute_trade(user_id: int, symbol: str, action: str, lot: float,
     max_open = settings.get("max_open_trades", 5)
     current_open = len(get_open_trades(user_id))
     if current_open >= max_open:
-        raise RuntimeError(f"Max open trades limit reached ({max_open}). Close existing trades first.")
+        raise RuntimeError(f"Maximum open trades limit reached ({max_open}). Close existing trades first.")
 
-    max_lot = settings.get("max_lot_size", MAX_LOT_SIZE)
+    max_lot = settings.get("max_lot_size", 10.0)
     if lot > max_lot:
-        raise RuntimeError(f"Lot size {lot} exceeds max allowed ({max_lot}).")
+        raise RuntimeError(f"Lot size {lot} exceeds maximum allowed ({max_lot}).")
 
-    if not _init_mt5():
-        error = mt5.last_error()
-        raise RuntimeError(f"Failed to initialize MT5: {error}")
+    bridge_url = _get_bridge_url(user_id)
 
     try:
-        authorized = mt5.login(login=stored["login_id"], password=stored["password"],
-                               server=stored["server_name"])
-        if not authorized:
-            error = mt5.last_error()
-            raise RuntimeError(f"MT5 login failed: {error}")
+        resp = httpx.post(
+            f"{bridge_url}/trade",
+            json={
+                "symbol": symbol.upper(),
+                "action": action.upper(),
+                "lot": lot,
+                "sl": sl,
+                "tp": tp,
+            },
+            timeout=TIMEOUT,
+        )
+    except httpx.ConnectError:
+        raise RuntimeError(f"Could not reach MT5 Bridge at {bridge_url}. Is the bridge running?")
+    except httpx.TimeoutException:
+        raise RuntimeError(f"MT5 Bridge at {bridge_url} timed out.")
 
-        sym = symbol.upper()
-        if not mt5.symbol_select(sym, True):
-            raise RuntimeError(f"Symbol {sym} not available")
+    if resp.status_code >= 400:
+        detail = "Trade execution failed"
+        try:
+            detail = resp.json().get("detail", resp.text)
+        except Exception:
+            detail = resp.text
+        raise RuntimeError(detail)
 
-        tick = mt5.symbol_info_tick(sym)
-        if not tick:
-            raise RuntimeError(f"No tick data for {sym}")
+    data = resp.json()
 
-        if action.upper() == "BUY":
-            order_type = mt5.ORDER_TYPE_BUY
-            price = tick.ask
-        else:
-            order_type = mt5.ORDER_TYPE_SELL
-            price = tick.bid
+    trade_id = save_trade(
+        user_id, symbol.upper(), action.upper(), lot, sl, tp,
+        data.get("ticket"), data.get("price", 0), source,
+        stored.get("broker_name", ""),
+    )
 
-        request = {
-            "action": mt5.TRADE_ACTION_DEAL,
-            "symbol": sym,
-            "volume": float(lot),
-            "type": order_type,
-            "price": price,
-            "sl": float(sl) if sl else 0,
-            "tp": float(tp) if tp else 0,
-            "deviation": MT5_DEV,
-            "magic": MT5_MAGIC,
-            "comment": f"ForexTrade {source}",
-            "type_time": mt5.ORDER_TIME_GTC,
-            "type_filling": mt5.ORDER_FILLING_IOC,
-        }
+    log_activity(user_id, "trade_executed",
+                 f"{action.upper()} {lot} {symbol.upper()} @ {data.get('price', 0)}",
+                 {"ticket": data.get("ticket"), "symbol": symbol.upper()})
 
-        result = mt5.order_send(request)
-        if result.retcode != mt5.TRADE_RETCODE_DONE:
-            raise RuntimeError(f"Order failed: {result.comment}")
-
-        trade_id = save_trade(user_id, sym, action.upper(), lot, sl, tp,
-                              result.order, result.price, source,
-                              stored.get("broker_name", ""))
-
-        log_activity(user_id, "trade_executed",
-                     f"{action} {lot} {sym} @ {result.price}",
-                     {"ticket": result.order, "symbol": sym})
-
-        return {
-            "id": trade_id, "ticket": result.order, "symbol": sym,
-            "action": action.upper(), "lot": lot, "sl": sl, "tp": tp,
-            "open_price": result.price, "status": "OPEN",
-        }
-    finally:
-        _shutdown()
+    return {
+        "id": trade_id,
+        "ticket": data.get("ticket"),
+        "symbol": symbol.upper(),
+        "action": action.upper(),
+        "lot": lot,
+        "sl": sl,
+        "tp": tp,
+        "open_price": data.get("price", 0),
+        "status": "OPEN",
+    }
