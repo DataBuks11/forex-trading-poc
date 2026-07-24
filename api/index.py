@@ -78,6 +78,21 @@ def test_bridge(bridge_url: str = ""):
     except Exception as e:
         return {"error": str(e), "type": type(e).__name__}
 
+@app.get("/api/test-connect-error")
+def test_connect_error():
+    """Test that RuntimeError properly converts to HTTPException."""
+    from services.mt5_service import _get_bridge_url, _check_response
+    import httpx
+    try:
+        url = _get_bridge_url(1)
+        return {"bridge_url": url}
+    except RuntimeError as e:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail=f"Bridge not configured: {e}")
+    except Exception as e:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=500, detail=str(e) or type(e).__name__)
+
 @app.get("/api/health")
 def health():
     try:
