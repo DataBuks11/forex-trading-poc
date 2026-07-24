@@ -93,6 +93,15 @@ def test_connect_error():
         from fastapi import HTTPException
         raise HTTPException(status_code=500, detail=str(e) or type(e).__name__)
 
+@app.get("/api/test-import")
+def test_import():
+    try:
+        from services.mt5_service import _get_bridge_url, _check_response
+        return {"mt5_service_import": "ok", "has_get_bridge": True}
+    except Exception as e:
+        import traceback
+        return {"error": str(e), "trace": traceback.format_exc()}
+
 @app.get("/api/health")
 def health():
     try:
