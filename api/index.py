@@ -62,7 +62,12 @@ def api_info():
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": VERSION}
+    try:
+        import httpx
+        httpx_ver = httpx.__version__
+    except ImportError:
+        httpx_ver = "not-installed"
+    return {"status": "ok", "version": VERSION, "httpx": httpx_ver}
 
 
 from database import init_db
