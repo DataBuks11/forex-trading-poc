@@ -102,6 +102,42 @@ def test_import():
         import traceback
         return {"error": str(e), "trace": traceback.format_exc()}
 
+@app.get("/api/test-connect-error")
+def test_connect_error():
+    from services.mt5_service import _get_bridge_url
+    from fastapi import HTTPException
+    try:
+        url = _get_bridge_url(1)
+        return {"bridge_url": url}
+    except RuntimeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error: {e}")
+
+@app.post("/api/debug-connect")
+async def debug_connect(request):
+    """Debug the connect flow step by step."""
+    from fastapi import HTTPException
+    data = await request.json()
+    try:
+        import httpx
+        bridge_url = data.get("bridge_url", "")
+        resp = httpx.post(f"{bridge_url}/connect", json={
+            "broker_name": data.get("broker_name", ""),
+            "login_id": data.get("login_id", 0),
+            "password": data.get("password", ""),
+            "server_name": data.get("server_name", ""),
+        }, timeout=30)
+        return {
+            "status_code": resp.status_code,
+            "headers": dict(resp.headers),
+            "body": resp.text,
+        }
+    except httpx.ConnectError as e:
+        raise HTTPException(status_code=400, detail=f"Connection error: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error: {e}")
+
 @app.get("/api/health")
 def health():
     try:
