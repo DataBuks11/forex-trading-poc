@@ -2,7 +2,7 @@ import os
 import sys
 sys.path.insert(0, os.path.dirname(__file__))
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(title="Forex Trading Platform API")
@@ -115,10 +115,10 @@ def test_connect_error():
         raise HTTPException(status_code=400, detail=f"Error: {e}")
 
 @app.post("/api/debug-connect")
-async def debug_connect(request):
+async def debug_connect(req: Request):
     """Debug the connect flow step by step."""
     from fastapi import HTTPException
-    data = await request.json()
+    data = await req.json()
     try:
         import httpx
         bridge_url = data.get("bridge_url", "")
