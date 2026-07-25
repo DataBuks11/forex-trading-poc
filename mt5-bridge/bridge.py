@@ -489,6 +489,7 @@ def health():
 if __name__ == "__main__":
     import uvicorn
     import subprocess
+    import time
     print("=" * 60)
     print("  MT5 Bridge Service")
     print(f"  Port: {BRIDGE_PORT}")
@@ -505,6 +506,7 @@ if __name__ == "__main__":
     # Scan for running MT5 processes
     print()
     print("Detecting running MT5 terminals...")
+    terminal_running = False
     try:
         result = subprocess.run(
             ['tasklist', '/FI', 'IMAGENAME eq terminal64.exe', '/FO', 'CSV', '/NH'],
@@ -513,6 +515,7 @@ if __name__ == "__main__":
         if result.stdout.strip():
             print(f"  terminal64.exe IS running")
             print(f"  {result.stdout.strip()}")
+            terminal_running = True
         else:
             print(f"  terminal64.exe NOT running - start MT5 first!")
             result2 = subprocess.run(
@@ -522,6 +525,7 @@ if __name__ == "__main__":
             if result2.stdout.strip():
                 print(f"  terminal.exe IS running")
                 print(f"  {result2.stdout.strip()}")
+                terminal_running = True
             else:
                 print(f"  terminal.exe NOT running either")
     except Exception as e:
@@ -534,57 +538,67 @@ if __name__ == "__main__":
     for t in terminals:
         print(f"  {t['path']}")
 
-    # Try initialization
+    # Try initialization with retry logic for IPC timeouts
     print()
     print("Attempting MT5 initialization...")
     initialized = False
+    last_error = None
 
-    # Method 1: Default initialize
-    if mt5.initialize():
+    def try_init(method_name, **kwargs):
+        nonlocal initialized, last_error
+        for attempt in range(3):
+            try:
+                if kwargs:
+                    result = mt5.initialize(**kwargs)
+                else:
+                    result = mt5.initialize()
+                if result:
+                    print(f"  {method_name} (attempt {attempt+1}): SUCCESS")
+                    return True
+                else:
+                    err = mt5.last_error()
+                    code = err[0] if err else -1
+                    last_error = err
+                    print(f"  {method_name} (attempt {attempt+1}): FAILED - {err}")
+                    if code == -10005:  # IPC timeout - retry
+                        mt5.shutdown()
+                        time.sleep(2)
+                        continue
+                    else:
+                        return False
+            except Exception as ex:
+                print(f"  {method_name} (attempt {attempt+1}): EXCEPTION - {ex}")
+                time.sleep(1)
+        return False
+
+    # Method 1: Default initialize with retry
+    if try_init("Method 1 (default)"):
         initialized = True
-        print("  Method 1 (default): SUCCESS")
-    else:
-        err = mt5.last_error()
-        print(f"  Method 1 (default): FAILED - {err}")
 
-    # Method 2: Try with explicit paths from found terminals
-    if not initialized:
+    # Method 2: Try with explicit paths
+    if not initialized and terminal_running:
         for t in terminals:
             if t.get("type") == "terminal":
                 path = t["path"]
-                print(f"  Method 2 (path={path}): Trying...")
-                try:
-                    if mt5.initialize(path=path):
-                        initialized = True
-                        print(f"  Method 2 (path={path}): SUCCESS")
-                        break
-                    else:
-                        print(f"  Method 2 (path={path}): FAILED - {mt5.last_error()}")
-                except Exception as ex:
-                    print(f"  Method 2 (path={path}): EXCEPTION - {ex}")
+                if try_init(f"Method 2 (path={path})", path=path):
+                    initialized = True
+                    break
 
-    # Method 3: Try with folder path
-    if not initialized:
+    # Method 3: Try with folder paths
+    if not initialized and not initialized:
         for t in terminals:
             if t.get("type") == "folder":
                 p = t["path"]
                 for exe in [r"terminal64.exe", r"terminal.exe"]:
                     fp = os.path.join(p, exe)
                     if Path(fp).exists():
-                        print(f"  Method 3 (path={fp}): Trying...")
-                        try:
-                            if mt5.initialize(path=fp):
-                                initialized = True
-                                print(f"  Method 3 (path={fp}): SUCCESS")
-                                break
-                            else:
-                                print(f"  Method 3 (path={fp}): FAILED - {mt5.last_error()}")
-                        except Exception as ex:
-                            print(f"  Method 3 (path={fp}): EXCEPTION - {ex}")
+                        if try_init(f"Method 3 (path={fp})", path=fp):
+                            initialized = True
+                            break
                 if initialized:
                     break
 
-    # Method 4: Try common install paths directly
+    # Method 4: Try custom broker paths
     if not initialized:
         paths_to_try = [
             r"C:\Program Files\MetaTrader 5\terminal64.exe",
@@ -594,16 +608,17 @@ if __name__ == "__main__":
         ]
         for p in paths_to_try:
             if Path(p).exists():
-                print(f"  Method 4 (path={p}): Trying...")
-                try:
-                    if mt5.initialize(path=p):
-                        initialized = True
-                        print(f"  Method 4 (path={p}): SUCCESS")
-                        break
-                    else:
-                        print(f"  Method 4 (path={p}): FAILED - {mt5.last_error()}")
-                except Exception as ex:
-                    print(f"  Method 4 (path={p}): EXCEPTION - {ex}")
+                if try_init(f"Method 4 (path={p})", path=p):
+                    initialized = True
+                    break
+
+    # Method 5: Initialize with login directly (skip explicit path)
+    if not initialized and terminal_running:
+        mt5_path = os.environ.get("MT5_EXECUTABLE_PATH", "")
+        if mt5_path:
+            print(f"  Method 5 (env path={mt5_path}): Trying...")
+            if try_init(f"Method 5 (env path={mt5_path})", path=mt5_path):
+                initialized = True
 
     if initialized:
         ver = mt5.version()
@@ -620,18 +635,20 @@ if __name__ == "__main__":
                     print(f"  Company: {ai.company}")
         mt5.shutdown()
         print()
-        print("  ✓ BRIDGE READY - MT5 connected successfully")
+        print("  BRIDGE READY - MT5 connected successfully")
     else:
         print()
-        print("  ✗ MT5 initialization FAILED with all methods")
+        print(f"  MT5 initialization FAILED (last error: {last_error})")
         print()
         print("  TROUBLESHOOTING:")
-        print("  1. Open MetaTrader 5 and log into your broker account")
-        print("  2. Go to Tools → Options → Expert Advisors → Enable 'Allow Automated Trading'")
-        print("  3. Run this script as Administrator (right-click → Run as admin)")
-        print("  4. If MT5 is installed in a custom location, set MT5_EXECUTABLE_PATH")
-        print("     Example: set MT5_EXECUTABLE_PATH=C:\\YourPath\\terminal64.exe")
-        print("  5. Ensure only ONE instance of MT5 is running")
+        print("  1. COMPLETELY close MT5 (File → Exit)")
+        print("  2. Start the bridge FIRST: python bridge.py")
+        print("  3. THEN open MT5 and log into your broker")
+        print("  4. Go to Tools → Options → Expert Advisors → check 'Allow Automated Trading'")
+        print("  5. Wait for all charts/indicators to fully load before testing")
+        print("  6. If using CXM specifically, check if they have a custom terminal path")
+        print(f"     Try: set MT5_EXECUTABLE_PATH=C:\\Path\\To\\terminal64.exe")
+        print("  7. Restart your PC if IPC keeps failing")
 
     print()
     uvicorn.run(app, host="0.0.0.0", port=BRIDGE_PORT)
