@@ -603,15 +603,25 @@ def _send_wm_copydata():
                 break
         hwnd = user32.GetWindow(hwnd, 2)  # GW_HWNDNEXT
     if found_hwnd:
+        # Python 3.13 compatibility: ULONG_PTR and LPVOID may not exist
+        try:
+            ULONG_PTR = wintypes.ULONG_PTR
+        except AttributeError:
+            ULONG_PTR = ctypes.c_ulonglong
+        try:
+            LPVOID = wintypes.LPVOID
+        except AttributeError:
+            LPVOID = ctypes.c_void_p
+
         class COPYDATASTRUCT(ctypes.Structure):
-            _fields_ = [("dwData", wintypes.ULONG_PTR),
+            _fields_ = [("dwData", ULONG_PTR),
                         ("cbData", wintypes.DWORD),
-                        ("lpData", wintypes.LPVOID)]
+                        ("lpData", LPVOID)]
         msg = b"MT5_BRIDGE_PING"
         cds = COPYDATASTRUCT()
         cds.dwData = 0
         cds.cbData = len(msg)
-        cds.lpData = ctypes.cast(ctypes.create_string_buffer(msg), wintypes.LPVOID)
+        cds.lpData = ctypes.cast(ctypes.create_string_buffer(msg), LPVOID)
         user32.SendMessageW(found_hwnd, WM_COPYDATA, 0, ctypes.byref(cds))
         return True
     return False
