@@ -1308,18 +1308,20 @@ if __name__ == "__main__":
 
     print()
     print("[FILE MODE] Using file-based MQL5 bridge (bypasses IPC)")
-    print(f"[FILE MODE] Command file: {FILE_COMMAND}")
-    print(f"[FILE MODE] Response file: {FILE_RESPONSE}")
+    print(f"[FILE MODE] Command file: {COMMAND_FILE}")
+    print(f"[FILE MODE] Response file: {RESPONSE_FILE}")
     print()
 
     # Test the bridge
-    response = _file_send_command("PING", timeout=3)
-    if response and "PONG" in response:
-        parts = response.split("|")
-        print(f"[FILE MODE] Bridge working! Symbol: {parts[1]}, Server: {parts[2]}, Account: {parts[3]}")
+    response = _file_bridge_send_command("PING", timeout_sec=5)
+    if response.get("success"):
+        data = response.get("data", [])
+        print(f"[FILE MODE] Bridge working! Response: {'|'.join(data)}")
         bridge_mode = BridgeMode.FILE
         print()
         print("  *** BRIDGE READY - File-based mode active ***")
+    else:
+        print(f"[FILE MODE] Bridge test: {response.get('error', 'No response')}")
     else:
         print("[FILE MODE] Bridge not responding yet.")
         print()
