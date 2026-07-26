@@ -706,42 +706,9 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"[DEFENDER] Could not check: {e}")
 
-    # ── Kill stale MT5 processes ──────────────────────────────────────
+    # ── Detect running MT5 (do not kill, do not launch) ───────────────
     print()
-    print("[KILL] Terminating any stale MT5 processes...")
-    killed = _kill_mt5_processes()
-    if killed:
-        print(f"[KILL] Killed: {', '.join(killed)}")
-        time.sleep(3)
-    else:
-        print("[KILL] No stale MT5 processes found")
-
-    # ── Find MT5 terminal path ────────────────────────────────────────
-    print()
-    print("[FIND] Locating MT5 terminal...")
-    terminal_path = _get_mt5_terminal_path()
-    if terminal_path:
-        print(f"[FIND] Found: {terminal_path}")
-    else:
-        print("[FIND] No terminal64.exe found on system!")
-        recursive_found = _find_terminal64_recursive()
-        if recursive_found:
-            terminal_path = recursive_found[0]
-            print(f"[FIND] (deep scan): {terminal_path}")
-        else:
-            terminal_path = r"C:\Program Files\MetaTrader 5\terminal64.exe"
-
-    # ── Find MT5 data directory ───────────────────────────────────────
-    data_dirs = _find_mt5_data_dirs()
-    data_dir = data_dirs[0] if data_dirs else os.path.expandvars(
-        rf"%APPDATA%\MetaQuotes\Terminal\{MT5_INSTANCE_ID}"
-    )
-    print(f"[FIND] Data directory: {data_dir}")
-    print(f"[FIND] Log directory:  {os.path.join(data_dir, 'logs')}")
-
-    # ── Start MT5 if not running ──────────────────────────────────────
-    print()
-    print("[START] Ensuring MT5 terminal is running...")
+    print("[DETECT] Checking if MT5 terminal is running...")
     mt5_running = False
     try:
         r = subprocess.run(
@@ -750,249 +717,79 @@ if __name__ == "__main__":
         )
         if r.stdout.strip() and "terminal64" in r.stdout.lower():
             mt5_running = True
-            print(f"[START] terminal64.exe is already running")
+            print(f"[DETECT] terminal64.exe IS running")
     except Exception:
         pass
 
     if not mt5_running:
-        print(f"[START] Starting MT5: {terminal_path} /portable")
-        try:
-            launch_args = [terminal_path]
-            mt5_login = os.environ.get("MT5_LOGIN", "")
-            mt5_password = os.environ.get("MT5_PASSWORD", "")
-            mt5_server = os.environ.get("MT5_SERVER", "")
-            if mt5_login:
-                launch_args.append(f"/login:{mt5_login}")
-            if mt5_password:
-                launch_args.append(f"/password:{mt5_password}")
-            if mt5_server:
-                launch_args.append(f"/server:{mt5_server}")
-            launch_args.append("/portable")
-            subprocess.Popen(
-                launch_args,
-                shell=False,
-                creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
-                if hasattr(subprocess, "DETACHED_PROCESS") else 0,
-            )
-            print(f"[START] MT5 launched, waiting for terminal to initialize...")
-        except Exception as e:
-            print(f"[START] Launch failed: {e}")
+        print("[DETECT] terminal64.exe is NOT running")
+        print()
+        print("  >>> ACTION REQUIRED <<<")
+        print("  1. Open MetaTrader 5 manually from your desktop")
+        print("  2. Log into your broker account (CXM, CXM-Primary)")
+        print("  3. Wait for charts to load and connection status to show green")
+        print("  4. Then re-run: python bridge.py")
+        print()
+        sys.exit(1)
 
-    # ── Wait for MCP to be ready ──────────────────────────────────────
-    print()
-    print("[WAIT] Waiting for MT5 terminal to fully initialize...")
-    max_wait = 90  # seconds
-    mcp_ready = _is_mt5_mcp_ready(data_dir)
-    waited = 0
-    while not mcp_ready and waited < max_wait:
-        time.sleep(2)
-        waited += 2
-        mcp_ready = _is_mt5_mcp_ready(data_dir)
-        if waited % 10 == 0:
-            print(f"[WAIT] Still waiting... ({waited}s elapsed)")
-    if mcp_ready:
-        print(f"[WAIT] MT5 MCP is ready (after {waited}s)")
-    else:
-        print(f"[WAIT] Timed out after {max_wait}s - will try initialization anyway")
-    time.sleep(5)  # Extra buffer for full UI load
+    # ── Find MT5 data directory ───────────────────────────────────────
+    data_dirs = _find_mt5_data_dirs()
+    data_dir = data_dirs[0] if data_dirs else os.path.expandvars(
+        rf"%APPDATA%\MetaQuotes\Terminal\{MT5_INSTANCE_ID}"
+    )
+    print(f"[INFO] Data directory: {data_dir}")
 
-    # ── Send WM_COPYDATA to wake up MT5 ───────────────────────────────
+    # ── One simple initialization with retry ──────────────────────────
     print()
-    print("[WAKE] Sending WM_COPYDATA to MT5 window...")
-    if _send_wm_copydata():
-        print("[WAKE] WM_COPYDATA sent successfully")
-        time.sleep(1)
-    else:
-        print("[WAKE] Could not find MT5 window (terminal may be minimized)")
-
-    # ── Last MT5 log entries ──────────────────────────────────────────
-    print()
-    print("[LOGS] Last 15 lines from MT5 logs:")
-    for line in _read_mt5_logs(data_dir, max_lines=15):
-        print(f"  {line}")
-
-    # ── Initialize MT5 with comprehensive retry logic ─────────────────
-    print()
-    print("[INIT] ===== Starting MT5 initialization =====")
+    print("[INIT] Connecting to running MT5 terminal...")
     initialized = False
     last_error = None
-    backoff_delays = [1, 2, 4, 8, 16]
 
-    def _try_initialize(method_label: str, **kwargs) -> bool:
-        """Try mt5.initialize() with exponential backoff retry."""
-        global last_error
-        active_method = f"{method_label}"
-        for attempt, delay in enumerate(backoff_delays, 1):
-            try:
-                if kwargs:
-                    result = mt5.initialize(**kwargs)
-                else:
-                    result = mt5.initialize()
-                if result:
-                    print(f"  [{active_method}] SUCCESS (attempt {attempt})")
-                    return True
-                err = mt5.last_error()
-                code = err[0] if err else -1
-                msg = err[1] if err and len(err) > 1 else str(err)
-                last_error = err
-                print(f"  [{active_method}] attempt {attempt}: FAILED (code={code}, msg={msg})")
-                mt5.shutdown()
-                if attempt < len(backoff_delays):
-                    print(f"  [{active_method}] sleeping {delay}s before retry...")
-                    time.sleep(delay)
-            except Exception as ex:
-                print(f"  [{active_method}] attempt {attempt}: EXCEPTION {ex}")
-                time.sleep(1)
-        return False
-
-    # Strategy 1: Default initialize (MT5 auto-discovers terminal)
-    print("[INIT] Strategy 1: Default mt5.initialize()")
-    if _try_initialize("S1"):
-        initialized = True
-
-    # Strategy 2: Initialize with explicit terminal path
-    if not initialized:
-        print()
-        print(f"[INIT] Strategy 2: mt5.initialize(path={terminal_path})")
-        if _try_initialize("S2", path=terminal_path):
-            initialized = True
-        for alt_path in (data_dirs or []):
-            if not initialized:
-                print(f"[INIT] Strategy 2: mt5.initialize(path={alt_path})")
-                if _try_initialize("S2-data", path=alt_path):
-                    initialized = True
-                    break
-
-    # Strategy 3: Initialize with login credentials (skips IPC handshake on some builds)
-    if not initialized:
-        mt5_login = os.environ.get("MT5_LOGIN", "")
-        mt5_password = os.environ.get("MT5_PASSWORD", "")
-        mt5_server = os.environ.get("MT5_SERVER", "")
-        if mt5_login:
-            print()
-            print(f"[INIT] Strategy 3: mt5.initialize(login={mt5_login}, server={mt5_server})")
-            if _try_initialize("S3", login=int(mt5_login), password=mt5_password, server=mt5_server, path=terminal_path):
-                initialized = True
-            if not initialized:
-                if _try_initialize("S3-no-path", login=int(mt5_login), password=mt5_password, server=mt5_server):
-                    initialized = True
-
-    # Strategy 4: Initialize with portable flag
-    if not initialized:
-        print()
-        print(f"[INIT] Strategy 4: mt5.initialize(portable=True)")
+    for attempt in range(5):
         try:
-            if _try_initialize("S4", path=terminal_path, portable=True):
+            result = mt5.initialize()
+            if result:
                 initialized = True
-        except TypeError:
-            print("  [S4] 'portable' kwarg not supported by this mt5 package version")
-
-    # Strategy 5: Try all alternative paths found by deep scan
-    if not initialized:
-        print()
-        print("[INIT] Strategy 5: Trying ALL found terminal64.exe paths...")
-        all_paths = _find_terminal64_recursive()
-        for ap in all_paths:
-            if ap == terminal_path:
-                continue
-            print(f"[INIT] Strategy 5: path={ap}")
-            if _try_initialize(f"S5-{os.path.basename(os.path.dirname(ap))}", path=ap):
-                initialized = True
+                print(f"[INIT] Connected! (attempt {attempt+1})")
                 break
+            err = mt5.last_error()
+            last_error = err
+            code = err[0] if err else -1
+            print(f"[INIT] Attempt {attempt+1}: {err}")
+            mt5.shutdown()
+            time.sleep(3)
+        except Exception as ex:
+            print(f"[INIT] Attempt {attempt+1}: EXCEPTION {ex}")
+            time.sleep(2)
 
-    # Strategy 6: Kill and restart MT5, then retry
-    if not initialized:
-        print()
-        print("[INIT] Strategy 6: Kill MT5, restart clean, retry...")
-        _kill_mt5_processes()
-        time.sleep(5)
-        try:
-            launch_args = [terminal_path, "/portable"]
-            subprocess.Popen(
-                launch_args,
-                shell=False,
-                creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
-                if hasattr(subprocess, "DETACHED_PROCESS") else 0,
-            )
-        except Exception as e:
-            print(f"  [S6] Launch failed: {e}")
-        print("  [S6] Waiting 15s for fresh MT5 to fully load...")
-        time.sleep(15)
-        _send_wm_copydata()
-        time.sleep(1)
-        if _try_initialize("S6-default"):
-            initialized = True
-        if not initialized:
-            if _try_initialize("S6-path", path=terminal_path):
-                initialized = True
-
-    # ── Final Result ──────────────────────────────────────────────────
-    print()
-    print("=" * 60)
     if initialized:
-        try:
-            ver = mt5.version()
-            print(f"  MT5 Version: {ver[0]}.{ver[1]} build {ver[2]}")
-        except Exception:
-            pass
-        try:
-            ti = mt5.terminal_info()
-            if ti:
-                print(f"  Terminal path: {ti.path}")
-                print(f"  Build:         {ti.build}")
-                print(f"  Connected:     {ti.connected}")
-                print(f"  Trade allowed: {ti.trade_allowed}")
-                if ti.connected:
-                    try:
-                        ai = mt5.account_info()
-                        if ai:
-                            print(f"  Account:  {ai.login} on {ai.server}")
-                            print(f"  Balance:  {ai.balance} {ai.currency}")
-                            print(f"  Company:  {ai.company}")
-                    except Exception:
-                        pass
-        except Exception:
-            pass
+        ver = mt5.version()
+        print(f"  MT5 Version: {ver[0]}.{ver[1]} build {ver[2]}")
+        ti = mt5.terminal_info()
+        if ti:
+            print(f"  Terminal path: {ti.path}")
+            print(f"  Connected to broker: {ti.connected}")
+            if ti.connected:
+                ai = mt5.account_info()
+                if ai:
+                    print(f"  Account: {ai.login} on {ai.server}")
+                    print(f"  Balance: {ai.balance} {ai.currency}")
+                    print(f"  Company: {ai.company}")
         mt5.shutdown()
         print()
-        print("  *** BRIDGE READY - MT5 connected successfully ***")
+        print("  BRIDGE READY - MT5 connected successfully")
     else:
-        print(f"  MT5 initialization FAILED")
-        print(f"  Last error: {last_error}")
         print()
-        print("  === RECOVERY STEPS (try in order) ===")
+        print(f"  MT5 initialization FAILED (last error: {last_error})")
         print()
-        print("  1. RESTART THE TERMINAL:")
-        print("     - Close MT5 completely (File -> Exit)")
-        print("     - Re-run: python bridge.py")
-        print("     - The bridge will auto-start MT5")
+        print("  TROUBLESHOOTING:")
+        print("  1. Make sure MT5 is OPEN and you are LOGGED IN to your broker")
+        print("  2. Go to Tools -> Options -> Expert Advisors -> enable 'Allow Automated Trading'")
+        print("  3. Restart MT5 after enabling the setting above")
+        print("  4. Check if Windows Defender is blocking the connection")
+        print("  5. Try running this script BEFORE opening MT5 (reverse order)")
         print()
-        print("  2. ADD WINDOWS DEFENDER EXCLUSION:")
-        print("     Run these in Admin PowerShell:")
-        print(f'     Add-MpPreference -ExclusionProcess "{_sys.executable}"')
-        if terminal_path:
-            print(f'     Add-MpPreference -ExclusionProcess "{terminal_path}"')
-        print()
-        print("  3. SET CREDENTIALS AS ENV VARS:")
-        print("     set MT5_LOGIN=732959")
-        print("     set MT5_PASSWORD=YourPasswordHere")
-        print("     set MT5_SERVER=CXMDirect-Live")
-        print()
-        print("  4. ENABLE AUTOMATED TRADING IN MT5:")
-        print("     Tools -> Options -> Expert Advisors")
-        print("     Check 'Allow Automated Trading'")
-        print("     Check 'Allow DLL imports'")
-        print()
-        print("  5. CHECK FOR BROKER-SPECIFIC MT5 PATH:")
-        print("     Some brokers install to custom folders.")
-        print(f"     Set: set MT5_EXECUTABLE_PATH=C:\\Path\\To\\terminal64.exe")
-        print()
-        print("  6. CHECK YOUR MT5 BUILD:")
-        print("     Older builds may not support IPC properly.")
-        print("     Update MT5: Help -> Check for Updates")
-        print()
-        print(f"  7. The bridge API will still start on port {BRIDGE_PORT}.")
-        print("     You can call /connect later with credentials.")
+        sys.exit(1)
 
     print("=" * 60)
     print()
