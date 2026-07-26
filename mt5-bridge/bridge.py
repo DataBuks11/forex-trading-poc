@@ -35,7 +35,10 @@ MT5_EXE_PATH = os.environ.get("MT5_EXECUTABLE_PATH", r"C:\Program Files\MetaTrad
 MT5_LOGIN = os.environ.get("MT5_LOGIN")
 MT5_PASSWORD = os.environ.get("MT5_PASSWORD")
 MT5_SERVER = os.environ.get("MT5_SERVER")
-FILE_BRIDGE_DIR = os.environ.get("MT5_FILE_BRIDGE_DIR", r"C:\mt5_bridge")
+FILE_BRIDGE_DIR = os.environ.get(
+    "MT5_FILE_BRIDGE_DIR",
+    os.path.join(os.environ.get("APPDATA", ""), "MetaQuotes", "Terminal", "Common", "Files")
+)
 COMMAND_FILE = os.path.join(FILE_BRIDGE_DIR, "command.txt")
 RESPONSE_FILE = os.path.join(FILE_BRIDGE_DIR, "response.txt")
 
@@ -1322,6 +1325,9 @@ if __name__ == "__main__":
         print("  *** BRIDGE READY - File-based mode active ***")
     else:
         print(f"[FILE MODE] Bridge test: {response.get('error', 'No response')}")
+        print("[FILE MODE] EA not attached yet. Bridge will start anyway.")
+        print("[FILE MODE] Attach the EA to an MT5 chart and it will auto-connect.")
+        bridge_mode = BridgeMode.FILE
 
     print(f"  Port: {BRIDGE_PORT}")
     print("=" * 60)
