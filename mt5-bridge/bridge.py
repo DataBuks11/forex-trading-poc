@@ -1299,99 +1299,44 @@ if __name__ == "__main__":
     import uvicorn
 
     print("=" * 60)
-    print("  MT5 Bridge Service v3.0 - Multi-Strategy")
+    print("  MT5 Bridge Service v3.0 - FILE MODE")
     print(f"  Port: {BRIDGE_PORT}")
-    print(f"  Token: {BRIDGE_TOKEN[:8]}...")
     print("=" * 60)
 
-    is_admin = _ctypes.windll.shell32.IsUserAnAdmin() if hasattr(_ctypes, 'windll') else False
-    print(f"\n[SYS] Administrator: {is_admin}")
-    print(f"[SYS] Python: {sys.version}")
-    print(f"[SYS] Executable: {sys.executable}")
-
-    py_warn = _check_python_version()
-    if py_warn:
-        print(f"\n{py_warn}")
+    # Ensure bridge directory exists
+    os.makedirs(FILE_BRIDGE_DIR, exist_ok=True)
 
     print()
-    print("[DEFENDER] Checking Windows Defender...")
-    try:
-        r = subprocess.run(
-            ["powershell", "-NoProfile", "-Command",
-             "(Get-MpComputerStatus).RealTimeProtectionEnabled"],
-            capture_output=True, text=True, timeout=10,
-        )
-        if r.stdout.strip() == "True":
-            print("[DEFENDER] Real-time protection is ON")
-            if is_admin:
-                try:
-                    subprocess.run(
-                        ["powershell", "-NoProfile", "-Command",
-                         f"Add-MpPreference -ExclusionProcess '{sys.executable}' -Force"],
-                        capture_output=True, timeout=10,
-                    )
-                    subprocess.run(
-                        ["powershell", "-NoProfile", "-Command",
-                         "Add-MpPreference -ExclusionProcess 'terminal64.exe' -Force"],
-                        capture_output=True, timeout=10,
-                    )
-                    print("[DEFENDER] Exclusions added for python.exe and terminal64.exe")
-                except Exception as e:
-                    print(f"[DEFENDER] Could not add exclusions: {e}")
-            else:
-                print("[DEFENDER] Run as Admin to auto-add exclusions")
-        else:
-            print("[DEFENDER] Real-time protection is OFF")
-    except Exception as e:
-        print(f"[DEFENDER] Could not check: {e}")
-
+    print("[FILE MODE] Using file-based MQL5 bridge (bypasses IPC)")
+    print(f"[FILE MODE] Command file: {FILE_COMMAND}")
+    print(f"[FILE MODE] Response file: {FILE_RESPONSE}")
     print()
-    print("[CREDENTIALS] Using env vars (MT5_LOGIN, MT5_PASSWORD, MT5_SERVER) if set.")
-    login_str, password, server = _prompt_credentials()
 
-    success = False
-
-    if login_str and password and server:
-        success = _strategy_1_direct_login(login_str, password, server)
-        if not success:
-            success = _strategy_2_launch_with_cli_flags(login_str, password, server)
-
-    if not success:
-        success = _strategy_3_standard_ipc()
-
-    if not success:
+    # Test the bridge
+    response = _file_send_command("PING", timeout=3)
+    if response and "PONG" in response:
+        parts = response.split("|")
+        print(f"[FILE MODE] Bridge working! Symbol: {parts[1]}, Server: {parts[2]}, Account: {parts[3]}")
+        bridge_mode = BridgeMode.FILE
         print()
-        print("=" * 60)
-        print("  ALL IPC STRATEGIES FAILED")
-        print("=" * 60)
-        _print_diagnostics()
-        print()
-        choice = input("Try file-based MQL5 bridge? [Y/n]: ").strip().lower()
-        if choice != "n":
-            success = _strategy_4_file_bridge()
-
-    if success:
-        print()
-        print("=" * 60)
-        print(f"  BRIDGE READY - Mode: {bridge_mode.value.upper()}")
-        print(f"  Port: {BRIDGE_PORT}")
-        print("=" * 60)
-        print()
-        uvicorn.run(app, host="0.0.0.0", port=BRIDGE_PORT)
+        print("  *** BRIDGE READY - File-based mode active ***")
     else:
+        print("[FILE MODE] Bridge not responding yet.")
         print()
-        print("=" * 60)
-        print("  ALL CONNECTION STRATEGIES FAILED")
-        print("=" * 60)
-        _print_diagnostics()
+        print("  >>> SETUP REQUIRED <<<")
         print()
-        print("TROUBLESHOOTING:")
-        print("  1. Install MetaTrader5==5.0.45: pip install MetaTrader5==5.0.45")
-        print("  2. Use Python 3.10 or 3.11 64-bit (best compatibility)")
-        print("  3. Open MT5, go to Tools -> Options -> Expert Advisors:")
-        print("     - Enable 'Allow Automated Trading'")
-        print("     - Enable 'Allow DLL imports'")
-        print("  4. Add exclusion in Windows Defender for terminal64.exe folder")
-        print("  5. Use the file-based bridge (bridge.mq5) as a guaranteed fallback")
+        print("  1. Copy bridge.mq5 to MT5 Experts folder:")
+        print("     Open MT5 -> File -> Open Data Folder -> MQL5 -> Experts")
+        print(f"     Copy: {os.path.join(BRIDGE_DIR, 'bridge.mq5')} -> there")
         print()
-        sys.exit(1)
+        print("  2. In MT5 Navigator panel (Ctrl+N), right-click -> Refresh")
+        print("  3. Drag 'bridge' Expert Advisor onto any open chart")
+        print("  4. Ensure 'Allow Automated Trading' is ON in MT5 (Tools -> Options -> Expert Advisors)")
+        print("  5. The bridge will auto-detect the EA once attached")
+        print()
+        bridge_mode = BridgeMode.FILE
+
+    print(f"  Port: {BRIDGE_PORT}")
+    print("=" * 60)
+    print()
+    uvicorn.run(app, host="0.0.0.0", port=BRIDGE_PORT)
