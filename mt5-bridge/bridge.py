@@ -694,13 +694,24 @@ if __name__ == "__main__":
         )
         if r.stdout.strip() == "True":
             defender_on = True
-            print("[DEFENDER] Real-time protection is ON - may block MT5 IPC")
-            print("[DEFENDER] If IPC keeps failing, add exclusion for:")
-            print(f"           {_sys.executable}")
-            mt5_path = _get_mt5_terminal_path()
-            if mt5_path:
-                print(f"           {mt5_path}")
-            print("[DEFENDER] Run as Admin: Add-MpPreference -ExclusionProcess 'python.exe'")
+            print("[DEFENDER] Real-time protection is ON - will add exclusions now")
+            if is_admin:
+                try:
+                    subprocess.run(
+                        ["powershell", "-NoProfile", "-Command",
+                         f"Add-MpPreference -ExclusionProcess '{_sys.executable}' -Force"],
+                        capture_output=True, timeout=10
+                    )
+                    subprocess.run(
+                        ["powershell", "-NoProfile", "-Command",
+                         "Add-MpPreference -ExclusionProcess 'terminal64.exe' -Force"],
+                        capture_output=True, timeout=10
+                    )
+                    print("[DEFENDER] Exclusions added for python.exe and terminal64.exe")
+                except Exception:
+                    print("[DEFENDER] Could not add exclusions automatically")
+            else:
+                print("[DEFENDER] Run as Admin to auto-add exclusions")
         else:
             print("[DEFENDER] Real-time protection is OFF")
     except Exception as e:
@@ -739,7 +750,19 @@ if __name__ == "__main__":
     )
     print(f"[INFO] Data directory: {data_dir}")
 
-    # ── One simple initialization with retry ──────────────────────────
+    # ── Force restart MT5 to clear IPC with new exclusions ───────────
+    if defender_on and is_admin:
+        print()
+        print("[RESTART] Force-restarting MT5 to apply Defender exclusions...")
+        subprocess.run(["taskkill", "/F", "/IM", "terminal64.exe"], capture_output=True)
+        time.sleep(3)
+        mt5_exe = _get_mt5_terminal_path()
+        if mt5_exe:
+            subprocess.Popen([mt5_exe], creationflags=0x00000008 if hasattr(subprocess, 'DETACHED_PROCESS') else 0)
+            print("[RESTART] MT5 restarted, waiting 20s for full load...")
+            time.sleep(20)
+        else:
+            print("[RESTART] Could not find terminal64.exe to restart")
     print()
     print("[INIT] Connecting to running MT5 terminal...")
     initialized = False
