@@ -88,8 +88,7 @@ string ReadCommand()
    int handle = FileOpen(COMMAND_FILE, FILE_READ|FILE_TXT|FILE_COMMON);
    if(handle == INVALID_HANDLE)
    {
-      // Try shared folder
-      handle = FileOpen(COMMAND_FILE, FILE_READ|FILE_TXT|FILE_SHARED_READ);
+      return "";
    }
    
    if(handle != INVALID_HANDLE)
@@ -329,7 +328,7 @@ string HandleClose(string cmd)
    if(result.retcode != TRADE_RETCODE_DONE)
       return "ERROR:Close rejected. retcode=" + IntegerToString(result.retcode) + " " + result.comment;
    
-   WriteLog("POSITION CLOSED: ticket=" + IntegerToString(ticket) + " symbol=" + symbol + " profit=" + DoubleToString(result.profit, 2));
+   WriteLog("POSITION CLOSED: ticket=" + IntegerToString(ticket) + " symbol=" + symbol);
    
    return "CLOSE_OK|" + IntegerToString(ticket) + "|" + DoubleToString(result.price, 5);
 }

@@ -1322,21 +1322,6 @@ if __name__ == "__main__":
         print("  *** BRIDGE READY - File-based mode active ***")
     else:
         print(f"[FILE MODE] Bridge test: {response.get('error', 'No response')}")
-    else:
-        print("[FILE MODE] Bridge not responding yet.")
-        print()
-        print("  >>> SETUP REQUIRED <<<")
-        print()
-        print("  1. Copy bridge.mq5 to MT5 Experts folder:")
-        print("     Open MT5 -> File -> Open Data Folder -> MQL5 -> Experts")
-        print(f"     Copy: {os.path.join(BRIDGE_DIR, 'bridge.mq5')} -> there")
-        print()
-        print("  2. In MT5 Navigator panel (Ctrl+N), right-click -> Refresh")
-        print("  3. Drag 'bridge' Expert Advisor onto any open chart")
-        print("  4. Ensure 'Allow Automated Trading' is ON in MT5 (Tools -> Options -> Expert Advisors)")
-        print("  5. The bridge will auto-detect the EA once attached")
-        print()
-        bridge_mode = BridgeMode.FILE
 
     print(f"  Port: {BRIDGE_PORT}")
     print("=" * 60)
