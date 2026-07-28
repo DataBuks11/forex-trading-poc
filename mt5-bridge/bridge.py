@@ -39,8 +39,8 @@ FILE_BRIDGE_DIR = os.environ.get(
     "MT5_FILE_BRIDGE_DIR",
     os.path.join(os.environ.get("APPDATA", ""), "MetaQuotes", "Terminal", "Common", "Files")
 )
-COMMAND_FILE = os.path.join(FILE_BRIDGE_DIR, "command.txt")
-RESPONSE_FILE = os.path.join(FILE_BRIDGE_DIR, "response.txt")
+COMMAND_FILE = os.path.join(FILE_BRIDGE_DIR, "bridge_cmd.txt")
+RESPONSE_FILE = os.path.join(FILE_BRIDGE_DIR, "bridge_resp.txt")
 
 BROKER_SPECIFIC_DIRS = [
     "CXM Trader", "CXM", "FXTM", "ICMarkets", "Pepperstone",
@@ -253,34 +253,34 @@ def _file_bridge_init():
 
 
 def _file_bridge_send_command(cmd: str, timeout_sec: float = 30.0) -> dict:
-    for _ in range(2):
-        try:
-            Path(RESPONSE_FILE).write_text("")
-            break
-        except Exception:
-            time.sleep(0.2)
-    for _ in range(2):
-        try:
-            Path(COMMAND_FILE).write_text(cmd)
-            break
-        except Exception:
-            time.sleep(0.2)
+    try:
+        Path(RESPONSE_FILE).write_text("", encoding="ascii")
+    except Exception:
+        pass
+    try:
+        Path(COMMAND_FILE).write_text(cmd, encoding="ascii")
+    except Exception:
+        return {"success": False, "error": "Cannot write command file", "data": []}
+    
     deadline = time.time() + timeout_sec
     while time.time() < deadline:
         time.sleep(0.3)
         try:
-            raw = Path(RESPONSE_FILE).read_text().strip()
+            raw = Path(RESPONSE_FILE).read_text(encoding="ascii").strip()
         except Exception:
             continue
         if raw:
-            Path(COMMAND_FILE).write_text("")
             parts = raw.split("|")
-            status = parts[0].upper() if parts else "ERROR"
-            if status == "OK":
-                return {"success": True, "data": parts[1:]}
+            status = parts[0].upper() if parts else ""
+            
+            if status in ("PONG", "ACCOUNT", "POSITIONS", "TRADE_OK", "CLOSE_OK", "MODIFY_OK", "LOGIN"):
+                return {"success": True, "data": parts}
+            elif status in ("ERROR", "TRADE_ERR", "CLOSE_ERR", "UNKNOWN"):
+                return {"success": False, "error": raw, "data": parts}
             else:
-                return {"success": False, "error": raw, "data": []}
-    return {"success": False, "error": "TIMEOUT: no response from MQL5 EA", "data": []}
+                return {"success": True, "data": parts}
+    
+    return {"success": False, "error": "TIMEOUT: no response from EA", "data": []}
 
 
 def _file_bridge_read_account() -> dict:
@@ -288,22 +288,19 @@ def _file_bridge_read_account() -> dict:
     if not res["success"]:
         raise HTTPException(status_code=500, detail=f"File bridge error: {res['error']}")
     data = res["data"]
-    if len(data) >= 13:
+    # Simple EA format: ACCOUNT|login|server|company|balance|equity|margin|free_margin|leverage|currency
+    if len(data) >= 2:
         return {
-            "account_number": int(data[0].split("=",1)[1]) if "=" in data[0] else data[0],
-            "balance": float(data[1].split("=",1)[1]) if "=" in data[1] else float(data[1]),
-            "equity": float(data[2].split("=",1)[1]) if "=" in data[2] else float(data[2]),
-            "margin": float(data[3].split("=",1)[1]) if "=" in data[3] else float(data[3]),
-            "free_margin": float(data[4].split("=",1)[1]) if "=" in data[4] else float(data[4]),
-            "leverage": int(data[5].split("=",1)[1]) if "=" in data[5] else int(data[5]),
-            "currency": data[6].split("=",1)[1] if "=" in data[6] else data[6],
-            "company": data[7].split("=",1)[1] if "=" in data[7] else data[7],
-            "account_type": data[8].split("=",1)[1] if "=" in data[8] else data[8],
-            "server": data[9].split("=",1)[1] if "=" in data[9] else data[9],
-            "name": data[10].split("=",1)[1] if "=" in data[10] and len(data) > 10 else "",
-            "profit": float(data[11].split("=",1)[1]) if len(data) > 11 and "=" in data[11] else 0,
-            "margin_free": float(data[12].split("=",1)[1]) if len(data) > 12 and "=" in data[12] else 0,
-            "margin_level": float(data[13].split("=",1)[1]) if len(data) > 13 and "=" in data[13] else 0,
+            "account_number": int(data[1].strip()) if data[1].strip() else 0,
+            "server": data[2].strip() if len(data) > 2 else "",
+            "company": data[3].strip() if len(data) > 3 else "",
+            "balance": float(data[4].strip()) if len(data) > 4 and data[4].strip() else 0,
+            "equity": float(data[5].strip()) if len(data) > 5 and data[5].strip() else 0,
+            "margin": float(data[6].strip()) if len(data) > 6 and data[6].strip() else 0,
+            "free_margin": float(data[7].strip()) if len(data) > 7 and data[7].strip() else 0,
+            "leverage": int(data[8].strip()) if len(data) > 8 and data[8].strip() else 0,
+            "currency": data[9].strip() if len(data) > 9 else "USD",
+            "account_type": "live",
         }
     raise HTTPException(status_code=500, detail=f"Invalid account data from EA: {res}")
 
@@ -441,7 +438,7 @@ def connect(req: ConnectRequest, token: Optional[str] = None):
             "connected_at": datetime.now(timezone.utc).isoformat(),
         }
     elif bridge_mode == BridgeMode.FILE:
-        _file_bridge_send_command(f"LOGIN|{req.login_id}|{req.password}|{req.server_name}")
+        # In FILE mode, MT5 is already logged in - just read account info
         ai_data = _file_bridge_read_account()
         _active_connection = {
             "broker_name": req.broker_name,
