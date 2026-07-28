@@ -42,28 +42,33 @@ void OnTimer()
    string response;
    
    if(StringFind(upper, "PING") == 0)
-      response = "PONG|" + Symbol() + "|" + IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN)) + "|" + AccountInfoString(ACCOUNT_SERVER) + "|" + (TerminalInfoInteger(TERMINAL_CONNECTED) != 0 ? "CONNECTED" : "DISCONNECTED") + "|" + DoubleToString(AccountInfoDouble(ACCOUNT_BALANCE),2) + "|" + AccountInfoString(ACCOUNT_CURRENCY);
+      response = "PONG|" + Symbol() + "|" + IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN)) + "|" + AccountInfoString(ACCOUNT_SERVER) + "|" + DoubleToString(AccountInfoDouble(ACCOUNT_BALANCE),2) + "|" + AccountInfoString(ACCOUNT_CURRENCY);
    else if(StringFind(upper, "ACCOUNT") == 0)
    {
+      double bal = AccountInfoDouble(ACCOUNT_BALANCE);
+      double eq = AccountInfoDouble(ACCOUNT_EQUITY);
+      double mar = AccountInfoDouble(ACCOUNT_MARGIN);
+      double fm = AccountInfoDouble(ACCOUNT_MARGIN_FREE);
+      long lev = AccountInfoInteger(ACCOUNT_LEVERAGE);
+      
       response = "ACCOUNT|";
       response += IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN)) + "|";
       response += AccountInfoString(ACCOUNT_SERVER) + "|";
       response += AccountInfoString(ACCOUNT_COMPANY) + "|";
-      response += DoubleToString(AccountInfoDouble(ACCOUNT_BALANCE), 2) + "|";
-      response += DoubleToString(AccountInfoDouble(ACCOUNT_EQUITY), 2) + "|";
-      response += DoubleToString(AccountInfoDouble(ACCOUNT_MARGIN), 2) + "|";
-      response += DoubleToString(AccountInfoDouble(ACCOUNT_MARGIN_FREE), 2) + "|";
-      response += IntegerToString(AccountInfoInteger(ACCOUNT_LEVERAGE)) + "|";
+      response += DoubleToString(bal, 2) + "|";
+      response += DoubleToString(eq, 2) + "|";
+      response += DoubleToString(mar, 2) + "|";
+      response += DoubleToString(fm, 2) + "|";
+      response += IntegerToString(lev) + "|";
       response += AccountInfoString(ACCOUNT_CURRENCY) + "|";
       response += IntegerToString(AccountInfoInteger(ACCOUNT_TRADE_MODE)) + "|";
       response += DoubleToString(AccountInfoDouble(ACCOUNT_PROFIT), 2);
       
-      // Log to terminal for debugging
-      Print("Bridge ACCOUNT: login=", AccountInfoInteger(ACCOUNT_LOGIN),
-            " server=", AccountInfoString(ACCOUNT_SERVER),
-            " balance=", DoubleToString(AccountInfoDouble(ACCOUNT_BALANCE),2),
-            " currency=", AccountInfoString(ACCOUNT_CURRENCY),
-            " connected=", TerminalInfoInteger(TERMINAL_CONNECTED));
+      Print("Bridge ACCT: login=", AccountInfoInteger(ACCOUNT_LOGIN),
+            " bal=", DoubleToString(bal,2),
+            " eq=", DoubleToString(eq,2),
+            " lev=", lev,
+            " cur=", AccountInfoString(ACCOUNT_CURRENCY));
    }
    else if(StringFind(upper, "POSITIONS") == 0)
    {
