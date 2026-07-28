@@ -309,31 +309,30 @@ def _file_bridge_read_positions() -> list[dict]:
     res = _file_bridge_send_command("POSITIONS")
     if not res["success"]:
         raise HTTPException(status_code=500, detail=f"File bridge error: {res['error']}")
-    if not res["data"] or (len(res["data"]) == 1 and not res["data"][0].strip()):
+    if not res["data"] or len(res["data"]) <= 1:
         return []
-    raw_data = "|".join(res["data"])
+    count = int(res["data"][1].strip()) if len(res["data"]) > 1 else 0
+    if count == 0:
+        return []
+    # Simple EA format: POSITIONS|count|ticket|sym|type|vol|open|cur|sl|tp|profit|...
     positions = []
-    for entry in raw_data.split("|||"):
-        entry = entry.strip()
-        if not entry:
-            continue
-        fields = entry.split("|")
-        if len(fields) >= 10:
-            positions.append({
-                "ticket": int(fields[0]),
-                "symbol": fields[1],
-                "type": fields[2],
-                "volume": float(fields[3]),
-                "open_price": float(fields[4]),
-                "current_price": float(fields[5]),
-                "sl": float(fields[6]),
-                "tp": float(fields[7]),
-                "profit": float(fields[8]),
-                "swap": float(fields[9]),
-                "commission": float(fields[10]) if len(fields) > 10 else 0,
-                "open_time": fields[11] if len(fields) > 11 else "",
-                "comment": fields[12] if len(fields) > 12 else "",
-            })
+    fields_per_pos = 10
+    data_fields = res["data"][2:]  # skip POSITIONS and count
+    for i in range(0, len(data_fields), fields_per_pos):
+        if i + fields_per_pos > len(data_fields):
+            break
+        pos = {
+            "ticket": int(data_fields[i].strip()),
+            "symbol": data_fields[i+1].strip(),
+            "type": data_fields[i+2].strip(),
+            "volume": float(data_fields[i+3].strip()),
+            "open_price": float(data_fields[i+4].strip()),
+            "current_price": float(data_fields[i+5].strip()),
+            "sl": float(data_fields[i+6].strip()),
+            "tp": float(data_fields[i+7].strip()),
+            "profit": float(data_fields[i+8].strip()),
+        }
+        positions.append(pos)
     return positions
 
 

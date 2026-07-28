@@ -24,3 +24,17 @@ api.interceptors.response.use(
 );
 
 export default api;
+
+// Direct bridge client - no auth, no /api prefix
+export const bridgeApi = axios.create({
+  baseURL: "http://localhost:8765",
+  headers: { "Content-Type": "application/json" },
+});
+
+bridgeApi.interceptors.response.use(
+  (res) => res,
+  (err) => {
+    const msg = err.response?.data?.detail || err.message || "Bridge request failed";
+    return Promise.reject(new Error(msg));
+  }
+);

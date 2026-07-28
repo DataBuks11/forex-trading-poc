@@ -18,7 +18,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import toast from "react-hot-toast";
-import api from "@/lib/api";
+import api, { bridgeApi } from "@/lib/api";
 import { useMT5Status } from "@/hooks/use-data";
 import { cn, formatCurrency, formatNumber } from "@/lib/utils";
 
@@ -75,10 +75,12 @@ export default function MT5ConnectPage() {
     }
     setConnecting(true);
     try {
-      if (bridgeUrl) {
-        await api.put("/settings", { bridge_url: bridgeUrl });
-      }
-      await api.post("/mt5/connect", getPayload());
+      await bridgeApi.post("/connect", {
+        broker_name: brokerName,
+        login_id: parseInt(loginId) || 0,
+        password,
+        server_name: serverName,
+      });
       toast.success("Connected successfully");
       setTestResult(null);
       refetch();
