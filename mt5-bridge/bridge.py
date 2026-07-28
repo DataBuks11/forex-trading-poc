@@ -288,19 +288,24 @@ def _file_bridge_read_account() -> dict:
     if not res["success"]:
         raise HTTPException(status_code=500, detail=f"File bridge error: {res['error']}")
     data = res["data"]
-    # Simple EA format: ACCOUNT|login|server|company|balance|equity|margin|free_margin|leverage|currency
+    # Simple EA format: ACCOUNT|login|server|company|balance|equity|margin|free_margin|leverage|currency|trade_mode|profit
     if len(data) >= 2:
+        is_cent = "Cent" in (data[9].strip() if len(data) > 9 else "")
+        multiplier = 0.01 if is_cent else 1.0  # Cent accounts store in cents
+        
         return {
             "account_number": int(data[1].strip()) if data[1].strip() else 0,
             "server": data[2].strip() if len(data) > 2 else "",
             "company": data[3].strip() if len(data) > 3 else "",
-            "balance": float(data[4].strip()) if len(data) > 4 and data[4].strip() else 0,
-            "equity": float(data[5].strip()) if len(data) > 5 and data[5].strip() else 0,
-            "margin": float(data[6].strip()) if len(data) > 6 and data[6].strip() else 0,
-            "free_margin": float(data[7].strip()) if len(data) > 7 and data[7].strip() else 0,
+            "balance": float(data[4].strip()) * multiplier if len(data) > 4 and data[4].strip() else 0,
+            "equity": float(data[5].strip()) * multiplier if len(data) > 5 and data[5].strip() else 0,
+            "margin": float(data[6].strip()) * multiplier if len(data) > 6 and data[6].strip() else 0,
+            "free_margin": float(data[7].strip()) * multiplier if len(data) > 7 and data[7].strip() else 0,
             "leverage": int(data[8].strip()) if len(data) > 8 and data[8].strip() else 0,
             "currency": data[9].strip() if len(data) > 9 else "USD",
             "account_type": "live",
+            "trade_mode": data[10].strip() if len(data) > 10 else "",
+            "profit": float(data[11].strip()) * multiplier if len(data) > 11 and data[11].strip() else 0,
         }
     raise HTTPException(status_code=500, detail=f"Invalid account data from EA: {res}")
 

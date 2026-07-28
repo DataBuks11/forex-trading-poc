@@ -42,7 +42,7 @@ void OnTimer()
    string response;
    
    if(StringFind(upper, "PING") == 0)
-      response = "PONG|" + Symbol() + "|" + IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN)) + "|" + AccountInfoString(ACCOUNT_SERVER);
+      response = "PONG|" + Symbol() + "|" + IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN)) + "|" + AccountInfoString(ACCOUNT_SERVER) + "|" + (TerminalInfoInteger(TERMINAL_CONNECTED) != 0 ? "CONNECTED" : "DISCONNECTED") + "|" + DoubleToString(AccountInfoDouble(ACCOUNT_BALANCE),2) + "|" + AccountInfoString(ACCOUNT_CURRENCY);
    else if(StringFind(upper, "ACCOUNT") == 0)
    {
       response = "ACCOUNT|";
@@ -54,7 +54,16 @@ void OnTimer()
       response += DoubleToString(AccountInfoDouble(ACCOUNT_MARGIN), 2) + "|";
       response += DoubleToString(AccountInfoDouble(ACCOUNT_MARGIN_FREE), 2) + "|";
       response += IntegerToString(AccountInfoInteger(ACCOUNT_LEVERAGE)) + "|";
-      response += AccountInfoString(ACCOUNT_CURRENCY);
+      response += AccountInfoString(ACCOUNT_CURRENCY) + "|";
+      response += IntegerToString(AccountInfoInteger(ACCOUNT_TRADE_MODE)) + "|";
+      response += DoubleToString(AccountInfoDouble(ACCOUNT_PROFIT), 2);
+      
+      // Log to terminal for debugging
+      Print("Bridge ACCOUNT: login=", AccountInfoInteger(ACCOUNT_LOGIN),
+            " server=", AccountInfoString(ACCOUNT_SERVER),
+            " balance=", DoubleToString(AccountInfoDouble(ACCOUNT_BALANCE),2),
+            " currency=", AccountInfoString(ACCOUNT_CURRENCY),
+            " connected=", TerminalInfoInteger(TERMINAL_CONNECTED));
    }
    else if(StringFind(upper, "POSITIONS") == 0)
    {
