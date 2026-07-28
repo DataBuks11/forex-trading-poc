@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import {
   Plug,
@@ -16,10 +16,11 @@ import {
   User,
   Building2,
   ExternalLink,
+  CircleDot,
+  CheckCircle2,
 } from "lucide-react";
 import toast from "react-hot-toast";
-import api, { bridgeApi } from "@/lib/api";
-import { useMT5Status } from "@/hooks/use-data";
+import { bridgeApi } from "@/lib/api";
 import { cn, formatCurrency, formatNumber } from "@/lib/utils";
 
 const fadeIn = {
@@ -40,32 +41,67 @@ const childVariant = {
 const inputClass =
   "w-full px-3 py-2 bg-muted border border-border rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all";
 
+interface AccountData {
+  account_number?: number;
+  account_type?: string;
+  broker?: string;
+  company?: string;
+  server?: string;
+  balance?: number;
+  equity?: number;
+  margin?: number;
+  free_margin?: number;
+  leverage?: number;
+  currency?: string;
+  terminal_build?: number;
+  connected_at?: string;
+}
+
 export default function MT5ConnectPage() {
-  const { data, isLoading, refetch } = useMT5Status();
   const [brokerName, setBrokerName] = useState("");
   const [loginId, setLoginId] = useState("");
   const [password, setPassword] = useState("");
   const [serverName, setServerName] = useState("");
   const [remember, setRemember] = useState(true);
-  const [bridgeUrl, setBridgeUrl] = useState("");
   const [connecting, setConnecting] = useState(false);
-  const [testing, setTesting] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
-  const [testResult, setTestResult] = useState<{
-    success: boolean;
-    message: string;
-  } | null>(null);
+  const [bridgeOnline, setBridgeOnline] = useState<boolean | null>(null);
+  const [account, setAccount] = useState<AccountData | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const isConnected = data?.is_connected;
-  const account = data;
+  // Check bridge on mount
+  useEffect(() => {
+    bridgeApi.get("/health").then(() => setBridgeOnline(true)).catch(() => setBridgeOnline(false));
+    // Restore saved account
+    const saved = localStorage.getItem("mt5_account");
+    if (saved) {
+      try { setAccount(JSON.parse(saved)); } catch {}
+    }
+  }, []);
 
-  const getPayload = () => ({
-    broker_name: brokerName,
-    login_id: parseInt(loginId) || 0,
-    password,
-    server_name: serverName,
-    remember,
-  });
+  const fetchAccount = useCallback(async () => {
+    try {
+      const res = await bridgeApi.get("/account");
+      const data = res.data;
+      const acct: AccountData = {
+        account_number: data.account_number,
+        account_type: data.account_type || "live",
+        company: data.company || brokerName,
+        server: data.server || serverName,
+        balance: data.balance,
+        equity: data.equity,
+        margin: data.margin,
+        free_margin: data.free_margin,
+        leverage: data.leverage,
+        currency: data.currency || "USD",
+      };
+      localStorage.setItem("mt5_account", JSON.stringify(acct));
+      setAccount(acct);
+      return acct;
+    } catch {
+      return null;
+    }
+  }, [brokerName, serverName]);
 
   const handleConnect = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -75,68 +111,48 @@ export default function MT5ConnectPage() {
     }
     setConnecting(true);
     try {
-      await bridgeApi.post("/connect", {
+      const res = await bridgeApi.post("/connect", {
         broker_name: brokerName,
         login_id: parseInt(loginId) || 0,
         password,
         server_name: serverName,
       });
-      toast.success("Connected successfully");
-      setTestResult(null);
-      refetch();
+      toast.success("Connected to MT5!");
+      // Fetch full account info after connect
+      setTimeout(() => fetchAccount(), 1000);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Connection failed";
-      toast.error(message);
+      const msg = err instanceof Error ? err.message : "Connection failed";
+      if (msg.includes("Network Error") || msg.includes("ERR_CONNECTION")) {
+        toast.error("Bridge not running. Start: python bridge.py", { duration: 8000 });
+      } else {
+        toast.error(msg);
+      }
     } finally {
       setConnecting(false);
     }
   };
 
-  const handleTest = async () => {
-    if (!brokerName || !loginId || !password || !serverName) {
-      toast.error("All fields are required to test connection");
-      return;
-    }
-    setTesting(true);
-    setTestResult(null);
-    try {
-      const res = await api.post("/mt5/test", getPayload());
-      const msg =
-        res.data?.message || res.data?.detail || "Test connection successful";
-      setTestResult({ success: true, message: msg });
-      toast.success("Test connection successful");
-    } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : "Test connection failed";
-      setTestResult({ success: false, message });
-      toast.error(message);
-    } finally {
-      setTesting(false);
-    }
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchAccount();
+    setRefreshing(false);
+    toast.success("Account refreshed");
   };
 
   const handleDisconnect = async () => {
     setDisconnecting(true);
     try {
-      await api.post("/mt5/disconnect");
+      await bridgeApi.post("/disconnect");
       toast.success("Disconnected");
-      setTestResult(null);
-      refetch();
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Disconnect failed";
-      toast.error(message);
-    } finally {
-      setDisconnecting(false);
+    } catch {
+      // bridge might be offline, just clear locally
     }
+    localStorage.removeItem("mt5_account");
+    setAccount(null);
+    setDisconnecting(false);
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
-  }
+  const isConnected = account !== null;
 
   return (
     <div className="space-y-6 max-w-2xl">
@@ -148,320 +164,129 @@ export default function MT5ConnectPage() {
       </motion.div>
 
       {/* Bridge Status */}
-      <motion.div
-        {...fadeIn}
-        className="bg-card border border-border rounded-lg p-6"
-      >
-        <div className="flex items-center gap-2 mb-4">
-          <ExternalLink className="w-5 h-5 text-primary" />
-          <h3 className="font-semibold">MT5 Bridge Connection</h3>
+      <motion.div {...fadeIn} className="bg-card border border-border rounded-lg p-6">
+        <div className="flex items-center justify-between mb-4 pb-3 border-b border-border">
+          <div className="flex items-center gap-2">
+            <CircleDot className="w-5 h-5 text-primary" />
+            <h3 className="font-semibold">Bridge Status</h3>
+          </div>
+          <span className={cn(
+            "px-2 py-1 rounded text-xs font-medium",
+            bridgeOnline === true ? "bg-emerald-500/10 text-emerald-400" : 
+            bridgeOnline === false ? "bg-red-500/10 text-red-400" :
+            "bg-muted text-muted-foreground"
+          )}>
+            {bridgeOnline === true ? "Online" : bridgeOnline === false ? "Offline" : "Checking..."}
+          </span>
         </div>
-        <div className="bg-muted/50 border border-border rounded-md p-4 text-sm space-y-2">
-          <p className="text-muted-foreground">
-            The MT5 Bridge is a local service that runs on your Windows PC and connects to your installed MetaTrader 5 terminal. The cloud backend communicates with this bridge to execute trades.
-          </p>
-          <ol className="list-decimal list-inside space-y-1 text-xs text-muted-foreground">
-            <li>Install Python 3.10+ on your Windows PC</li>
-            <li>Install MetaTrader 5 terminal and log into your broker account</li>
-            <li>Run the bridge: <code className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono">cd mt5-bridge &amp;&amp; pip install -r requirements.txt &amp;&amp; python bridge.py</code></li>
-            <li>The bridge starts on port <code className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono">8765</code></li>
-            <li>Expose it to the internet using a tunnel (ngrok, localhost.run, etc.)</li>
-            <li>Example: <code className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono">ngrok http 8765</code></li>
-            <li>Copy the ngrok URL (e.g. <code className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono">https://abc123.ngrok-free.app</code>)</li>
-            <li>Enter this URL in the <strong>Bridge URL</strong> field in the connection form below</li>
-          </ol>
-        </div>
+        {bridgeOnline === false && (
+          <div className="bg-amber-500/10 border border-amber-500/20 rounded-md p-3 text-sm text-amber-400">
+            Bridge not detected. Run: <code className="bg-muted px-1.5 py-0.5 rounded text-xs">python bridge.py</code>
+          </div>
+        )}
       </motion.div>
 
-      <motion.div
-        {...fadeIn}
-        className="bg-card border border-border rounded-lg p-6"
-      >
+      {/* Connection Form */}
+      <motion.div {...fadeIn} className="bg-card border border-border rounded-lg p-6">
         <form onSubmit={handleConnect} className="space-y-4">
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-              <Building2 className="w-3.5 h-3.5" />
+            <label className="text-xs font-medium text-muted-foreground">
               Broker Name
             </label>
-            <input
-              type="text"
-              placeholder="e.g. ICMarkets, FXPro, Exness, Pepperstone"
-              value={brokerName}
-              onChange={(e) => setBrokerName(e.target.value)}
-              required
-              className={inputClass}
-            />
+            <input type="text" placeholder="e.g. CXM, ICMarkets, FXPro" value={brokerName}
+              onChange={(e) => setBrokerName(e.target.value)} required className={inputClass} />
           </div>
-
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-              <User className="w-3.5 h-3.5" />
+            <label className="text-xs font-medium text-muted-foreground">
               MT5 Login ID
             </label>
-            <input
-              type="number"
-              placeholder="Enter your MT5 login ID"
-              value={loginId}
-              onChange={(e) => setLoginId(e.target.value)}
-              required
-              className={inputClass}
-            />
+            <input type="number" placeholder="732959" value={loginId}
+              onChange={(e) => setLoginId(e.target.value)} required className={inputClass} />
           </div>
-
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-              <Key className="w-3.5 h-3.5" />
+            <label className="text-xs font-medium text-muted-foreground">
               Password
             </label>
-            <input
-              type="password"
-              placeholder="Enter your MT5 password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              className={inputClass}
-            />
+            <input type="password" placeholder="Your MT5 password" value={password}
+              onChange={(e) => setPassword(e.target.value)} required className={inputClass} />
           </div>
-
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-              <Server className="w-3.5 h-3.5" />
+            <label className="text-xs font-medium text-muted-foreground">
               Server Name
             </label>
-            <input
-              type="text"
-              placeholder="e.g. ICMarkets-Demo, ICMarkets-Live, Exness-Real"
-              value={serverName}
-              onChange={(e) => setServerName(e.target.value)}
-              required
-              className={inputClass}
-            />
+            <input type="text" placeholder="e.g. CXMDirect-Live" value={serverName}
+              onChange={(e) => setServerName(e.target.value)} required className={inputClass} />
           </div>
 
           <label className="flex items-center gap-2.5 cursor-pointer select-none group">
-            <input
-              type="checkbox"
-              checked={remember}
-              onChange={(e) => setRemember(e.target.checked)}
-              className="sr-only"
-            />
-            <div
-              className={cn(
-                "w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors",
-                remember
-                  ? "bg-primary border-primary"
-                  : "border-muted-foreground/40 bg-transparent group-hover:border-muted-foreground/60"
-              )}
-            >
+            <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} className="sr-only" />
+            <div className={cn(
+              "w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors",
+              remember ? "bg-primary border-primary" : "border-muted-foreground/40 bg-transparent group-hover:border-muted-foreground/60"
+            )}>
               {remember && (
-                <svg
-                  className="w-2.5 h-2.5 text-primary-foreground"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={3}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M5 13l4 4L19 7"
-                  />
+                <svg className="w-2.5 h-2.5 text-primary-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                 </svg>
               )}
             </div>
-            <span className="text-sm text-muted-foreground">
-              Remember Credentials
-            </span>
+            <span className="text-sm text-muted-foreground">Remember Credentials</span>
           </label>
 
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-              <ExternalLink className="w-3.5 h-3.5" />
-              Bridge URL
-            </label>
-            <input
-              type="text"
-              placeholder="https://your-ngrok-url.ngrok-free.app"
-              value={bridgeUrl}
-              onChange={(e) => setBridgeUrl(e.target.value)}
-              className={inputClass}
-            />
-            <p className="text-xs text-muted-foreground">
-              The public URL of your local MT5 Bridge (required for trading).
-            </p>
-          </div>
-
-          {testResult && (
-            <div
-              className={cn(
-                "rounded-md p-3 text-sm",
-                testResult.success
-                  ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400"
-                  : "bg-red-500/10 border border-red-500/20 text-red-400"
-              )}
-            >
-              {testResult.message}
-            </div>
-          )}
-
           <div className="flex gap-3 pt-1">
-            <button
-              type="submit"
-              disabled={connecting}
-              className="flex-1 py-2.5 px-4 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-opacity flex items-center justify-center gap-2"
-            >
+            <button type="submit" disabled={connecting}
+              className="flex-1 py-2.5 px-4 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-opacity flex items-center justify-center gap-2">
               {connecting && <Loader2 className="w-4 h-4 animate-spin" />}
               {connecting ? "Connecting..." : "Connect"}
             </button>
-            <button
-              type="button"
-              onClick={handleTest}
-              disabled={testing}
-              className="flex-1 py-2.5 px-4 bg-secondary text-secondary-foreground rounded-md text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-opacity flex items-center justify-center gap-2"
-            >
-              {testing && <Loader2 className="w-4 h-4 animate-spin" />}
-              {testing ? "Testing..." : "Test Connection"}
-            </button>
-            <button
-              type="button"
-              onClick={handleDisconnect}
-              disabled={disconnecting}
-              className="py-2.5 px-4 border border-destructive/30 text-destructive rounded-md text-sm font-medium hover:bg-destructive/10 disabled:opacity-50 transition-colors flex items-center justify-center gap-2 shrink-0"
-            >
-              {disconnecting && <Loader2 className="w-4 h-4 animate-spin" />}
-              {disconnecting ? "..." : "Disconnect"}
+            <button type="button" onClick={handleDisconnect} disabled={disconnecting || !isConnected}
+              className="py-2.5 px-4 border border-destructive/30 text-destructive rounded-md text-sm font-medium hover:bg-destructive/10 disabled:opacity-50 transition-colors">
+              Disconnect
             </button>
           </div>
         </form>
       </motion.div>
 
+      {/* Account Info Card */}
       {isConnected && account && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, delay: 0.1 }}
-          className="bg-card border border-border rounded-lg p-6"
-        >
+          className="bg-card border border-border rounded-lg p-6">
           <div className="flex items-center justify-between mb-4 pb-3 border-b border-border">
             <div className="flex items-center gap-2.5">
               <span className="relative flex h-2.5 w-2.5">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                 <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
               </span>
-              <span className="text-sm font-semibold text-emerald-400">
-                Connected
-              </span>
+              <span className="text-sm font-semibold text-emerald-400">Connected</span>
             </div>
-            <button
-              onClick={() => refetch()}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
+            <button onClick={handleRefresh} disabled={refreshing}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
+              <RefreshCw className={cn("w-3.5 h-3.5", refreshing && "animate-spin")} />
               Refresh
             </button>
           </div>
 
-          <motion.div
-            variants={staggerChildren}
-            initial="initial"
-            animate="animate"
-            className="grid grid-cols-2 lg:grid-cols-3 gap-3"
-          >
+          <motion.div variants={staggerChildren} initial="initial" animate="animate"
+            className="grid grid-cols-2 lg:grid-cols-3 gap-3">
             {[
-              {
-                label: "Account Number",
-                value: account.account_number
-                  ? `#${account.account_number}`
-                  : "-",
-                icon: User,
-              },
-              {
-                label: "Account Type",
-                value: account.account_type ?? "-",
-                icon: Building2,
-              },
-              {
-                label: "Broker",
-                value: account.broker ?? "-",
-                icon: Server,
-              },
-              {
-                label: "Balance",
-                value:
-                  account.balance != null
-                    ? formatCurrency(account.balance, account.currency)
-                    : "-",
-                icon: Wallet,
-              },
-              {
-                label: "Equity",
-                value:
-                  account.equity != null
-                    ? formatCurrency(account.equity, account.currency)
-                    : "-",
-                icon: PiggyBank,
-              },
-              {
-                label: "Margin",
-                value:
-                  account.margin != null
-                    ? formatCurrency(account.margin, account.currency)
-                    : "-",
-                icon: TrendingUp,
-              },
-              {
-                label: "Free Margin",
-                value:
-                  account.free_margin != null
-                    ? formatCurrency(account.free_margin, account.currency)
-                    : account.balance != null && account.margin != null
-                      ? formatCurrency(
-                          account.balance - account.margin,
-                          account.currency
-                        )
-                      : "-",
-                icon: Shield,
-              },
-              {
-                label: "Leverage",
-                value: account.leverage
-                  ? `1:${formatNumber(account.leverage, 0)}`
-                  : "-",
-                icon: Activity,
-              },
-              {
-                label: "Currency",
-                value: account.currency ?? "-",
-                icon: ExternalLink,
-              },
-              {
-                label: "Terminal Version",
-                value: account.terminal_version ?? "-",
-                icon: Server,
-              },
-              {
-                label: "Connection Time",
-                value: account.connection_time ?? "-",
-                icon: Plug,
-              },
-              {
-                label: "Server",
-                value: account.server_name ?? account.server ?? "-",
-                icon: Server,
-              },
+              { label: "Account #", value: account.account_number ? `#${account.account_number}` : "-", icon: User },
+              { label: "Balance", value: account.balance != null ? formatCurrency(account.balance, account.currency || "USD") : "-", icon: Wallet },
+              { label: "Equity", value: account.equity != null ? formatCurrency(account.equity, account.currency || "USD") : "-", icon: PiggyBank },
+              { label: "Margin", value: account.margin != null ? formatCurrency(account.margin, account.currency || "USD") : "-", icon: TrendingUp },
+              { label: "Free Margin", value: account.free_margin != null ? formatCurrency(account.free_margin, account.currency || "USD") : "-", icon: Shield },
+              { label: "Leverage", value: account.leverage ? `1:${account.leverage}` : "-", icon: Activity },
+              { label: "Server", value: account.server ?? "-", icon: Server },
+              { label: "Company", value: account.company ?? "-", icon: Building2 },
+              { label: "Currency", value: account.currency ?? "-", icon: ExternalLink },
             ].map(({ label, value, icon: Icon }) => (
-              <motion.div
-                key={label}
-                variants={childVariant}
-                className="bg-muted/50 rounded-md p-3 border border-border"
-              >
+              <motion.div key={label} variants={childVariant}
+                className="bg-muted/50 rounded-md p-3 border border-border">
                 <div className="flex items-center gap-1.5 mb-1">
                   <Icon className="w-3.5 h-3.5 text-muted-foreground" />
                   <span className="text-xs text-muted-foreground">{label}</span>
                 </div>
-                <p className="text-sm font-mono font-semibold text-foreground truncate">
-                  {value}
-                </p>
+                <p className="text-sm font-mono font-semibold text-foreground truncate">{value}</p>
               </motion.div>
             ))}
           </motion.div>
