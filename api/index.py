@@ -171,3 +171,6 @@ app.include_router(activity_router)
 
 from routers.settings import router as settings_router
 app.include_router(settings_router)
+
+from routers.scripts import router as scripts_router
+app.include_router(scripts_router)

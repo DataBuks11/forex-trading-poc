@@ -15,16 +15,20 @@ import {
   Webhook,
   Settings,
   ListOrdered,
+  Code2,
+  Shield,
 } from "lucide-react";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/mt5-connect", label: "MT5 Connection", icon: Plug },
+  { href: "/scripts", label: "Trading Scripts", icon: Code2 },
   { href: "/auto-trading", label: "Auto Trading", icon: Radio },
   { href: "/tradingview", label: "TradingView", icon: Webhook },
   { href: "/open-positions", label: "Open Positions", icon: BarChart3 },
   { href: "/trade-history", label: "Trade History", icon: History },
   { href: "/activity-log", label: "Activity Log", icon: Activity },
+  { href: "/admin", label: "Admin Panel", icon: Shield },
 ];
 
 export function Sidebar() {
