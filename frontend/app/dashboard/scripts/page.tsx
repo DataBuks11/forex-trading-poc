@@ -501,27 +501,11 @@ export default function ScriptsPage() {
           <div className={cardHeaderClass}>
             <div className="flex items-center gap-2">
               <Zap className="w-5 h-5 text-primary" />
-              <h3 className="font-semibold text-sm">Quick Create Script</h3>
+              <h3 className="font-semibold text-sm">Create New Script</h3>
             </div>
-            <button
-              onClick={() => setShowCreate(!showCreate)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-md text-xs font-medium hover:opacity-90 transition-opacity"
-            >
-              {showCreate ? null : <Plus className="w-3.5 h-3.5" />}
-              {showCreate ? "Cancel" : "Create Script"}
-            </button>
           </div>
 
-          <AnimatePresence>
-            {showCreate && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: "auto", opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.25 }}
-                className="overflow-hidden"
-              >
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                   <div className="space-y-1.5">
                     <label className="text-xs font-medium text-muted-foreground">
                       Script Name
@@ -601,10 +585,7 @@ export default function ScriptsPage() {
                   {creating && <Loader2 className="w-4 h-4 animate-spin" />}
                   {creating ? "Creating..." : "Create Script"}
                 </button>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </motion.div>
+            </motion.div>
     </div>
   );
 }
