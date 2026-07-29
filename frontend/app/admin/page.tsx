@@ -309,7 +309,7 @@ export default function AdminPage() {
                       <td className="px-4 py-2 text-muted-foreground text-xs">
                         {formatDateTime(trade.created_at || trade.time || "")}
                       </td>
-                      <td className="px-4 py-2 text-xs">{trade.username ?? `#${trade.user_id}` ?? "-"}</td>
+                       <td className="px-4 py-2 text-xs">{trade.username || `#${trade.user_id}` || "-"}</td>
                       <td className="px-4 py-2 font-mono font-medium">{trade.symbol}</td>
                       <td className="px-4 py-2">
                         <span className={actionBadge(trade.action)}>{trade.action}</span>
