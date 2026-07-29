@@ -21,14 +21,14 @@ import {
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/mt5-connect", label: "MT5 Connection", icon: Plug },
-  { href: "/scripts", label: "Trading Scripts", icon: Code2 },
-  { href: "/auto-trading", label: "Auto Trading", icon: Radio },
-  { href: "/tradingview", label: "TradingView", icon: Webhook },
-  { href: "/open-positions", label: "Open Positions", icon: BarChart3 },
-  { href: "/trade-history", label: "Trade History", icon: History },
-  { href: "/activity-log", label: "Activity Log", icon: Activity },
-  { href: "/admin", label: "Admin Panel", icon: Shield },
+  { href: "/dashboard/mt5-connect", label: "MT5 Connection", icon: Plug },
+  { href: "/dashboard/scripts", label: "Trading Scripts", icon: Code2 },
+  { href: "/dashboard/auto-trading", label: "Auto Trading", icon: Radio },
+  { href: "/dashboard/tradingview", label: "TradingView", icon: Webhook },
+  { href: "/dashboard/open-positions", label: "Open Positions", icon: BarChart3 },
+  { href: "/dashboard/trade-history", label: "Trade History", icon: History },
+  { href: "/dashboard/activity-log", label: "Activity Log", icon: Activity },
+  { href: "/dashboard/admin", label: "Admin Panel", icon: Shield },
 ];
 
 export function Sidebar() {

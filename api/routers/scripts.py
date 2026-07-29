@@ -16,15 +16,12 @@ def list_scripts(user: TokenData = Depends(get_current_user)):
     """Get all available trading scripts."""
     db = get_db()
     try:
-        if is_admin(user.user_id):
-            rows = db.execute("SELECT * FROM trading_scripts ORDER BY created_at DESC").fetchall()
-        else:
-            rows = db.execute("SELECT * FROM trading_scripts WHERE is_active=1 ORDER BY created_at DESC").fetchall()
+        rows = db.execute("SELECT * FROM trading_scripts WHERE is_active=1 OR created_by=? ORDER BY created_at DESC", 
+                         (user.user_id,)).fetchall()
         scripts = []
         for r in rows:
             s = dict(r)
             s["script_config"] = json.loads(s["script_config"]) if s["script_config"] else {}
-            # Check if user has enabled this script
             us = db.execute("SELECT * FROM user_scripts WHERE user_id=? AND script_id=?", 
                            (user.user_id, s["id"])).fetchone()
             s["user_enabled"] = bool(us["is_enabled"]) if us else False
@@ -37,15 +34,14 @@ def list_scripts(user: TokenData = Depends(get_current_user)):
 
 @router.post("")
 def create_script(data: dict, user: TokenData = Depends(get_current_user)):
-    """Admin: Create a new trading script."""
-    if not is_admin(user.user_id):
-        raise HTTPException(403, "Admin only")
+    """Create a new trading script."""
     db = get_db()
     try:
+        is_admin_only = data.get("is_admin_only", False) and is_admin(user.user_id)
         db.execute(
-            "INSERT INTO trading_scripts (name, description, symbol, timeframe, script_config, created_by) VALUES (?,?,?,?,?,?)",
+            "INSERT INTO trading_scripts (name, description, symbol, timeframe, script_config, created_by, is_admin_only) VALUES (?,?,?,?,?,?,?)",
             (data["name"], data.get("description", ""), data.get("symbol", "EURUSD"),
-             data.get("timeframe", "M5"), json.dumps(data.get("script_config", {})), user.user_id)
+             data.get("timeframe", "M5"), json.dumps(data.get("script_config", {})), user.user_id, is_admin_only)
         )
         db.commit()
         sid = db.execute("SELECT last_insert_rowid()").fetchone()[0]
