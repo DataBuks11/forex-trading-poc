@@ -493,8 +493,7 @@ export default function ScriptsPage() {
         )}
       </motion.div>
 
-      {/* Quick Create Script (Admin) */}
-      {isAdmin && (
+      {/* Quick Create Script */}
         <motion.div
           {...fadeIn}
           className="bg-card border border-primary/20 rounded-lg p-6"
@@ -606,7 +605,6 @@ export default function ScriptsPage() {
             )}
           </AnimatePresence>
         </motion.div>
-      )}
     </div>
   );
 }
